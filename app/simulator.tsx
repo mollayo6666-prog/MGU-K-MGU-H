@@ -2,142 +2,108 @@
 
 import { useEffect, useState } from "react";
 
-type Scene = "straight" | "brake" | "boost";
+type View = "together" | "h" | "k";
 
-const scenes: { id: Scene; title: string; sub: string }[] = [
-  { id: "straight", title: "ON THE STRAIGHT", sub: "Both units work together" },
-  { id: "brake", title: "WHILE BRAKING", sub: "MGU-K recovers motion" },
-  { id: "boost", title: "WHILE ACCELERATING", sub: "MGU-K powers the wheels" },
+const views: { id: View; title: string; sub: string }[] = [
+  { id: "together", title: "SEE BOTH WORK", sub: "Full-throttle energy flow" },
+  { id: "h", title: "ONLY MGU-H", sub: "Exhaust and turbo" },
+  { id: "k", title: "ONLY MGU-K", sub: "Braking and acceleration" },
 ];
 
-const copy = {
-  straight: {
-    hIn: "HOT EXHAUST",
-    hOut: "ELECTRICITY",
-    hText: "Exhaust spins the turbo. MGU-H turns that rotation into electricity.",
-    kIn: "ELECTRICITY FROM MGU-H",
-    kOut: "FASTER WHEELS",
-    kText: "MGU-K receives that electricity and uses it as a motor to turn the drivetrain.",
-    formula: "HEAT → MGU-H → ELECTRICITY → MGU-K → MOTION",
-  },
-  brake: {
-    hIn: "LESS EXHAUST FLOW",
-    hOut: "MGU-H STANDBY",
-    hText: "MGU-H is not the main energy source during this braking example.",
-    kIn: "SPINNING WHEELS",
-    kOut: "ELECTRICITY TO BATTERY",
-    kText: "The wheels drive MGU-K as a generator. The car slows and the battery charges.",
-    formula: "MOTION → MGU-K → ELECTRICITY → BATTERY",
-  },
-  boost: {
-    hIn: "TURBO ROTATION",
-    hOut: "TURBO CONTROL",
-    hText: "MGU-H can use electricity to keep the turbo spinning and reduce turbo lag.",
-    kIn: "ELECTRICITY FROM BATTERY",
-    kOut: "FASTER WHEELS",
-    kText: "MGU-K receives stored electricity and uses it as a motor to add acceleration.",
-    formula: "BATTERY → ELECTRICITY → MGU-K → MOTION",
-  },
-};
-
 export default function Simulator() {
-  const [scene, setScene] = useState<Scene>("straight");
+  const [view, setView] = useState<View>("together");
+  const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const data = copy[scene];
+  const [selected, setSelected] = useState("h");
+
+  useEffect(() => {
+    setStep(0);
+    setPlaying(false);
+  }, [view]);
 
   useEffect(() => {
     if (!playing) return;
-    const order: Scene[] = ["straight", "brake", "boost"];
-    const timer = window.setInterval(() => {
-      setScene((current) => order[(order.indexOf(current) + 1) % order.length]);
-    }, 4200);
+    const max = view === "together" ? 5 : view === "h" ? 3 : 4;
+    const timer = window.setInterval(() => setStep((s) => (s + 1) % max), 1300);
     return () => window.clearInterval(timer);
-  }, [playing]);
+  }, [playing, view]);
+
+  const togetherSteps = ["Hot exhaust leaves the engine", "Exhaust spins the turbo", "MGU-H makes electricity", "Electricity reaches MGU-K", "MGU-K helps turn the rear wheels"];
+  const hSteps = ["Hot exhaust flows from the engine", "The turbo shaft spins", "MGU-H turns the spinning shaft into electricity"];
+  const kSteps = ["The rear wheels turn while braking", "MGU-K acts as a generator", "Electricity charges the battery", "Later, MGU-K uses that electricity to accelerate"];
+  const steps = view === "together" ? togetherSteps : view === "h" ? hSteps : kSteps;
+
+  const partInfo: Record<string, { name: string; plain: string; detail: string; color: string }> = {
+    engine: { name: "V6 ENGINE", plain: "Burns fuel", detail: "Hot exhaust gas leaves the cylinders and carries energy toward the turbo.", color: "white" },
+    turbo: { name: "TURBO", plain: "Spun by exhaust", detail: "The turbine and compressor share a shaft. Exhaust makes that shaft rotate very quickly.", color: "orange" },
+    h: { name: "MGU-H", plain: "Turbo ↔ electricity", detail: "The orange unit sits on the turbo shaft. It can generate electricity or motor the turbo.", color: "orange" },
+    battery: { name: "BATTERY", plain: "Stores electricity", detail: "The energy store saves recovered electrical energy until the car needs it.", color: "yellow" },
+    k: { name: "MGU-K", plain: "Wheels ↔ electricity", detail: "The blue unit connects to the crankshaft. It generates while braking and motors while accelerating.", color: "cyan" },
+    wheels: { name: "REAR WHEELS", plain: "Move the car", detail: "The drivetrain carries engine and MGU-K torque to the rear wheels.", color: "cyan" },
+  };
 
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#simulator"><span>E</span> ERS LAB</a>
-        <div>2014–2025 F1 HYBRID SYSTEM</div>
-        <small>SCIENCE CLASS SIMULATOR</small>
+        <a className="brand" href="#car"><span>E</span> ERS LAB</a>
+        <div>F1 HYBRID POWER · 2014–2025</div>
+        <small>BEGINNER MODE</small>
       </header>
 
-      <section className="hero" id="simulator">
-        <div className="eyebrow">FOLLOW THE ENERGY</div>
-        <h1>TWO UNITS.<br /><em>TWO SIMPLE LINES.</em></h1>
-        <p className="intro">Pick a driving moment. Read each line from left to right: energy goes in, the MGU changes it, and useful energy comes out.</p>
+      <section className="hero" id="car">
+        <div className="heroCopy">
+          <span className="eyebrow">LOOK INSIDE THE CAR</span>
+          <h1>WHERE ARE THE<br /><em>MGU-H & MGU-K?</em></h1>
+          <p>No engineering degree needed. Click the real parts, then press play to follow the energy through the car.</p>
+        </div>
 
-        <nav className="scenePicker" aria-label="Driving moment">
-          {scenes.map((item, index) => (
-            <button key={item.id} className={scene === item.id ? "active" : ""} onClick={() => { setScene(item.id); setPlaying(false); }}>
-              <span>0{index + 1}</span><b>{item.title}</b><small>{item.sub}</small>
-            </button>
-          ))}
-          <button className="playAll" onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ  PAUSE" : "▶  PLAY ALL"}</button>
+        <nav className="viewPicker" aria-label="Choose explanation">
+          {views.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><b>{item.title}</b><small>{item.sub}</small></button>)}
         </nav>
 
-        <section className={`twoLines scene-${scene}`} aria-live="polite">
-          <header>
-            <span>ENERGY FLOW</span>
-            <strong>{data.formula}</strong>
-          </header>
-
-          <article className={`mguLine hLine ${scene === "brake" ? "quiet" : ""}`}>
-            <div className="lineLabel">
-              <span>H = HEAT</span>
-              <b>MGU-H</b>
-              <small>Connected to the turbo</small>
-            </div>
-            <div className="energyBox input">
-              <small>ENERGY IN</small><b>{data.hIn}</b>
-            </div>
-            <div className="arrow orangeArrow"><div><i /><i /><i /><i /></div><span>{scene === "boost" ? "electric motor" : "spins generator"}</span></div>
-            <div className="mguMachine hMachine"><span>H</span><b>MGU-H</b></div>
-            <div className="arrow orangeArrow"><div><i /><i /><i /><i /></div><span>energy changes form</span></div>
-            <div className="energyBox output">
-              <small>ENERGY OUT</small><b>{data.hOut}</b>
-            </div>
-            <p>{data.hText}</p>
-          </article>
-
-          <div className={`transfer ${scene === "straight" ? "active" : ""}`}>
-            <span>{scene === "straight" ? "MGU-H SENDS ELECTRICITY DIRECTLY TO MGU-K" : scene === "brake" ? "THE BATTERY RECEIVES ENERGY FROM MGU-K" : "THE BATTERY SENDS ELECTRICITY TO MGU-K"}</span>
-            <i>↓</i>
+        <section className={`carLab view-${view}`}>
+          <div className="carHeader">
+            <div><span>NOW SHOWING</span><strong>{view === "together" ? "HOW BOTH UNITS WORK TOGETHER" : view === "h" ? "MGU-H · HEAT RECOVERY" : "MGU-K · KINETIC RECOVERY"}</strong></div>
+            <div className="legend"><i className="heatDot" />HEAT / MGU-H <i className="electricDot" />ELECTRICITY / MGU-K</div>
           </div>
 
-          <article className="mguLine kLine">
-            <div className="lineLabel">
-              <span>K = KINETIC</span>
-              <b>MGU-K</b>
-              <small>Connected to the crankshaft</small>
+          <div className="carCanvas">
+            <img src="/car-cutaway.png" alt="Illustrated cutaway of the rear half of a Formula-style hybrid race car showing its engine, turbo, motor-generators, battery, drivetrain and rear wheels" />
+            <div className={`energyPath heatPath ${view !== "k" ? "show" : ""}`}><i /><i /><i /><i /></div>
+            <div className={`energyPath electricPath ${view !== "h" ? "show" : ""}`}><i /><i /><i /><i /><i /></div>
+
+            <button className={`hotspot engineSpot ${selected === "engine" ? "selected" : ""}`} onClick={() => setSelected("engine")}><span>1</span><b>V6 ENGINE</b></button>
+            <button className={`hotspot turboSpot ${selected === "turbo" ? "selected" : ""}`} onClick={() => setSelected("turbo")}><span>2</span><b>TURBO</b></button>
+            <button className={`hotspot hSpot ${selected === "h" ? "selected" : ""} ${view === "k" ? "dim" : ""}`} onClick={() => setSelected("h")}><span>H</span><b>MGU-H</b></button>
+            <button className={`hotspot batterySpot ${selected === "battery" ? "selected" : ""}`} onClick={() => setSelected("battery")}><span>3</span><b>BATTERY</b></button>
+            <button className={`hotspot kSpot ${selected === "k" ? "selected" : ""} ${view === "h" ? "dim" : ""}`} onClick={() => setSelected("k")}><span>K</span><b>MGU-K</b></button>
+            <button className={`hotspot wheelSpot ${selected === "wheels" ? "selected" : ""}`} onClick={() => setSelected("wheels")}><span>4</span><b>REAR WHEELS</b></button>
+
+            <aside className={`partCard ${partInfo[selected].color}`}>
+              <span>CLICKED PART</span><h2>{partInfo[selected].name}</h2><b>{partInfo[selected].plain}</b><p>{partInfo[selected].detail}</p>
+            </aside>
+          </div>
+
+          <div className="story">
+            <div className="storyTop">
+              <div><span>THE STORY IN ONE SENTENCE</span><strong>{view === "together" ? "Exhaust spins MGU-H → electricity powers MGU-K → wheels turn faster." : view === "h" ? "Exhaust spins the turbo → MGU-H turns that spin into electricity." : "Wheels spin MGU-K while braking → electricity is saved → MGU-K later boosts the wheels."}</strong></div>
+              <button onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ  PAUSE" : "▶  SHOW ME"}</button>
             </div>
-            <div className="energyBox input">
-              <small>ENERGY IN</small><b>{data.kIn}</b>
-            </div>
-            <div className="arrow cyanArrow"><div><i /><i /><i /><i /></div><span>{scene === "brake" ? "spins generator" : "powers motor"}</span></div>
-            <div className="mguMachine kMachine"><span>K</span><b>MGU-K</b></div>
-            <div className="arrow cyanArrow"><div><i /><i /><i /><i /></div><span>energy changes form</span></div>
-            <div className="energyBox output">
-              <small>ENERGY OUT</small><b>{data.kOut}</b>
-            </div>
-            <p>{data.kText}</p>
-          </article>
+            <ol>
+              {steps.map((text, index) => <li key={text} className={index === step ? "active" : index < step ? "done" : ""}><span>{index + 1}</span><p>{text}</p></li>)}
+            </ol>
+          </div>
         </section>
-
-        <div className="plainEnglish">
-          <span>IN PLAIN ENGLISH</span>
-          <strong>{scene === "straight" ? "MGU-H collects energy. MGU-K receives it and powers the car." : scene === "brake" ? "MGU-K takes motion from the wheels and saves it in the battery." : "MGU-K takes electricity from the battery and returns it as wheel motion."}</strong>
-        </div>
       </section>
 
-      <section className="remember">
-        <div><span>01</span><p><b>MGU-H</b> works with the turbo and exhaust.</p></div>
-        <div><span>02</span><p><b>MGU-K</b> works with the crankshaft and wheels.</p></div>
-        <div><span>03</span><p><b>Both are reversible:</b> they can be motors or generators.</p></div>
+      <section className="cheatSheet">
+        <div><span className="orange">H</span><h2>MGU-H</h2><b>Lives beside the turbo</b><p>Think: <strong>hot exhaust</strong>. It recovers energy from the spinning turbo shaft.</p></div>
+        <div className="versus">AND</div>
+        <div><span className="cyan">K</span><h2>MGU-K</h2><b>Lives beside the drivetrain</b><p>Think: <strong>moving wheels</strong>. It recovers braking energy and adds acceleration.</p></div>
       </section>
 
-      <section className="rules"><b>2026 NOTE</b><p>MGU-H was removed from current Formula 1. This simulator shows the two-unit system used from 2014 through 2025.</p></section>
-      <footer><span>ERS LAB</span><span>ENERGY IS TRANSFORMED, NOT CREATED.</span></footer>
+      <section className="truth"><b>ONE IMPORTANT DETAIL</b><p>The MGU units do not create free energy. Every conversion loses some energy as heat and sound; they simply rescue energy that would otherwise be wasted.</p></section>
+      <footer><span>ERS LAB · SCIENCE CLASS SIMULATOR</span><span>MGU-H WAS REMOVED FROM F1 IN 2026</span></footer>
     </main>
   );
 }
