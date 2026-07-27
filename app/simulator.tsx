@@ -92,6 +92,20 @@ export default function Simulator() {
             <button onClick={() => setPlaying(!playing)}>{playing ? "PAUSE" : "PLAY ALL FLOWS"} <b>{playing ? "Ⅱ" : "▶"}</b></button>
           </div>
 
+          <div className="bothUnits">
+            <div className={`unitSummary hSummary ${mode === "heat" ? "active" : ""}`}>
+              <div className="summaryBadge">H</div>
+              <div><span>MOTOR GENERATOR UNIT — HEAT</span><h2>MGU-H</h2><p><b>Turbo ⇄ electricity</b> · recovers exhaust energy and controls turbo speed</p></div>
+              <strong>{mode === "heat" ? "ACTIVE · GENERATING" : "AVAILABLE"}</strong>
+            </div>
+            <div className="unitJoin"><span>ENERGY<br />CAN FLOW<br />BETWEEN BOTH</span><i>⇄</i></div>
+            <div className={`unitSummary kSummary ${mode === "brake" || mode === "boost" ? "active" : ""}`}>
+              <div className="summaryBadge">K</div>
+              <div><span>MOTOR GENERATOR UNIT — KINETIC</span><h2>MGU-K</h2><p><b>Wheels ⇄ electricity</b> · recovers braking energy and adds acceleration</p></div>
+              <strong>{mode === "brake" ? "ACTIVE · GENERATING" : mode === "boost" ? "ACTIVE · MOTORING" : "RECEIVING ENERGY"}</strong>
+            </div>
+          </div>
+
           <div className="energyMap">
             <div className="sourceFlag"><small>ENERGY STARTS HERE</small><b>{data.source}</b></div>
             <div className="destinationFlag"><small>ENERGY ENDS HERE</small><b>{data.destination}</b></div>
