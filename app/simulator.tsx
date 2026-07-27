@@ -2,143 +2,154 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Phase = "brake" | "corner" | "accelerate" | "straight";
+type Mode = "heat" | "brake" | "boost";
 
-const phases: { id: Phase; label: string; hint: string }[] = [
-  { id: "brake", label: "BRAKE", hint: "Kinetic energy → electricity" },
-  { id: "corner", label: "CORNER", hint: "Turbo kept spinning" },
-  { id: "accelerate", label: "ACCELERATE", hint: "Electric boost to the wheels" },
-  { id: "straight", label: "FULL THROTTLE", hint: "Exhaust energy recovered" },
+const modes: { id: Mode; label: string; sub: string }[] = [
+  { id: "heat", label: "HARVEST HEAT", sub: "Full throttle" },
+  { id: "brake", label: "HARVEST MOTION", sub: "Braking" },
+  { id: "boost", label: "DEPLOY ENERGY", sub: "Acceleration" },
 ];
 
-const phaseCopy: Record<Phase, { title: string; body: string; takeaway: string }> = {
+const modeData = {
+  heat: {
+    number: "01",
+    title: "Heat becomes motion",
+    summary: "Exhaust spins the turbo and MGU-H. The electricity can be stored, or sent across the car to the MGU-K to help turn the wheels.",
+    equation: "THERMAL → MECHANICAL → ELECTRICAL → KINETIC",
+    source: "HOT EXHAUST",
+    destination: "REAR WHEELS",
+  },
   brake: {
-    title: "MGU-K becomes a generator",
-    body: "The rear wheels turn the MGU-K through the drivetrain. Its resistance helps slow the car and converts motion that would become brake heat into electrical energy.",
-    takeaway: "Motion → MGU-K → Battery",
+    number: "02",
+    title: "Motion is recovered",
+    summary: "During braking, the wheels drive the MGU-K as a generator. The car slows while part of its kinetic energy becomes electricity instead of brake heat.",
+    equation: "KINETIC → MECHANICAL → ELECTRICAL → CHEMICAL",
+    source: "REAR WHEELS",
+    destination: "BATTERY",
   },
-  corner: {
-    title: "MGU-H controls turbo speed",
-    body: "With less exhaust flow, the MGU-H can use electrical energy as a motor to keep the turbo spinning. This reduces turbo lag when the driver accelerates.",
-    takeaway: "Battery → MGU-H → Turbo",
-  },
-  accelerate: {
-    title: "MGU-K becomes a motor",
-    body: "Energy from the battery powers the MGU-K. It adds torque to the crankshaft, which helps drive the rear wheels and gives the car a burst of acceleration.",
-    takeaway: "Battery → MGU-K → Wheels",
-  },
-  straight: {
-    title: "MGU-H harvests exhaust energy",
-    body: "Hot, fast exhaust spins the turbine. The MGU-H on the turbo shaft acts as a generator and can send electricity to the battery or directly to the MGU-K.",
-    takeaway: "Exhaust → MGU-H → Battery / MGU-K",
+  boost: {
+    number: "03",
+    title: "Stored energy returns",
+    summary: "The battery releases electrical energy. The MGU-K acts as a motor, adding torque to the crankshaft and increasing the kinetic energy of the car.",
+    equation: "CHEMICAL → ELECTRICAL → MECHANICAL → KINETIC",
+    source: "BATTERY",
+    destination: "REAR WHEELS",
   },
 };
 
 export default function Simulator() {
-  const [phase, setPhase] = useState<Phase>("brake");
-  const [battery, setBattery] = useState(58);
-  const [running, setRunning] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
+  const [mode, setMode] = useState<Mode>("heat");
+  const [battery, setBattery] = useState(62);
+  const [playing, setPlaying] = useState(false);
+  const data = modeData[mode];
 
   useEffect(() => {
-    if (!running) return;
-    const order: Phase[] = ["brake", "corner", "accelerate", "straight"];
+    if (!playing) return;
+    const order: Mode[] = ["heat", "brake", "boost"];
     const timer = window.setInterval(() => {
-      setPhase((p) => order[(order.indexOf(p) + 1) % order.length]);
-    }, 2800);
+      setMode((current) => order[(order.indexOf(current) + 1) % order.length]);
+    }, 3500);
     return () => window.clearInterval(timer);
-  }, [running]);
+  }, [playing]);
 
   useEffect(() => {
-    const delta = phase === "brake" ? 12 : phase === "straight" ? 7 : phase === "corner" ? -4 : -14;
-    setBattery((value) => Math.max(8, Math.min(96, value + delta)));
-  }, [phase]);
+    setBattery((value) => Math.max(15, Math.min(94, value + (mode === "heat" ? 7 : mode === "brake" ? 13 : -18))));
+  }, [mode]);
 
-  const state = useMemo(() => ({
-    harvesting: phase === "brake" || phase === "straight",
-    kActive: phase === "brake" || phase === "accelerate",
-    hActive: phase === "corner" || phase === "straight",
-    kMode: phase === "brake" ? "GENERATING" : phase === "accelerate" ? "MOTORING" : "STANDBY",
-    hMode: phase === "straight" ? "GENERATING" : phase === "corner" ? "MOTORING" : "STANDBY",
-    speed: phase === "brake" ? 184 : phase === "corner" ? 126 : phase === "accelerate" ? 218 : 314,
-  }), [phase]);
+  const active = useMemo(() => ({
+    heat: mode === "heat",
+    battery: mode === "heat" || mode === "brake" || mode === "boost",
+    wheels: mode === "brake" || mode === "boost" || mode === "heat",
+    reverse: mode === "brake",
+  }), [mode]);
 
   return (
     <main>
       <header className="topbar">
-        <a className="brand" href="#simulator" aria-label="ERS Lab home">
-          <span className="brandMark">E</span><span>ERS LAB</span>
-        </a>
-        <div className="era">2014–2025 POWER UNIT</div>
-        <button className="infoButton" onClick={() => setInfoOpen(true)}>HOW IT WORKS <span>↗</span></button>
+        <a className="brand" href="#flow"><span className="brandMark">E</span><span>ERS LAB</span></a>
+        <span className="era">2014–2025 F1 HYBRID SYSTEM</span>
+        <span className="law">ENERGY IS TRANSFORMED, NOT CREATED</span>
       </header>
 
-      <section className="hero" id="simulator">
-        <div className="eyebrow"><span>◉</span> INTERACTIVE POWER FLOW</div>
-        <h1>Turn wasted energy<br />into <em>lap time.</em></h1>
-        <p className="intro">Choose a driving phase and watch how Formula 1&apos;s two motor-generator units move energy through the car.</p>
+      <section className="hero" id="flow">
+        <div className="heroCopy">
+          <div className="eyebrow">INTERACTIVE ENERGY FLOW</div>
+          <h1>FOLLOW THE<br /><em>ENERGY.</em></h1>
+          <p>Select a driving moment. The bright path shows where energy starts, how it changes form, and where it ends.</p>
+        </div>
 
-        <div className="phaseTabs" role="group" aria-label="Driving phase">
-          {phases.map((item, i) => (
-            <button key={item.id} className={phase === item.id ? "active" : ""} onClick={() => { setRunning(false); setPhase(item.id); }}>
-              <b>0{i + 1}</b><span>{item.label}</span><small>{item.hint}</small>
+        <div className="modePicker" role="group" aria-label="Choose energy flow">
+          {modes.map((item, index) => (
+            <button key={item.id} className={mode === item.id ? "active" : ""} onClick={() => { setPlaying(false); setMode(item.id); }}>
+              <span>0{index + 1}</span><b>{item.label}</b><small>{item.sub}</small>
             </button>
           ))}
         </div>
 
-        <div className={`machine phase-${phase}`}>
-          <div className="telemetry speed"><small>SPEED</small><strong>{state.speed}</strong><span>KM/H</span></div>
-          <div className="telemetry status"><i /><small>SYSTEM</small><strong>{state.harvesting ? "HARVEST" : "DEPLOY"}</strong></div>
+        <section className={`flowStage mode-${mode} ${active.reverse ? "reverse" : ""}`} aria-live="polite">
+          <div className="stageHeader">
+            <div><span>ACTIVE CONVERSION</span><strong>{data.equation}</strong></div>
+            <button onClick={() => setPlaying(!playing)}>{playing ? "PAUSE" : "PLAY ALL FLOWS"} <b>{playing ? "Ⅱ" : "▶"}</b></button>
+          </div>
 
-          <div className="powerUnit">
-            <div className="exhaust labelTag">EXHAUST</div>
-            <div className="flow exhaustFlow"><span>›</span><span>›</span><span>›</span></div>
-            <div className={`unit hUnit ${state.hActive ? "lit" : ""}`}>
-              <small>HEAT</small><b>H</b><span>MGU-H</span><em>{state.hMode}</em>
+          <div className="energyMap">
+            <div className="sourceFlag"><small>ENERGY STARTS HERE</small><b>{data.source}</b></div>
+            <div className="destinationFlag"><small>ENERGY ENDS HERE</small><b>{data.destination}</b></div>
+
+            <div className={`energyNode heatNode ${active.heat ? "on" : ""}`}>
+              <div className="nodeIcon heatIcon"><i /><i /><i /></div>
+              <span>THERMAL ENERGY</span><b>HOT EXHAUST</b><small>Fast gas carries heat away from the engine</small>
             </div>
-            <div className="turbo"><span>TURBO</span><i /></div>
-            <div className="engine"><small>1.6 L</small><b>V6</b><span>TURBO HYBRID</span><div className="pistons"><i /><i /><i /></div></div>
-            <div className={`unit kUnit ${state.kActive ? "lit" : ""}`}>
-              <small>KINETIC</small><b>K</b><span>MGU-K</span><em>{state.kMode}</em>
+
+            <div className="connector first"><div className="energyDots"><i /><i /><i /><i /></div><span>spins</span></div>
+
+            <div className={`machineNode hNode ${mode === "heat" ? "on" : ""}`}>
+              <div className="rotor">H</div><span>MGU-H</span><b>GENERATOR</b><small>Turbo rotation becomes electricity</small>
             </div>
-            <div className="drivetrain"><span>DRIVETRAIN</span><i /></div>
-            <div className="wheel leftWheel" /><div className="wheel rightWheel" />
-            <div className="flow electricFlow"><span>•</span><span>•</span><span>•</span><span>•</span></div>
-            <div className="battery">
-              <div className="batteryTop"><span>ENERGY STORE</span><b>{battery}%</b></div>
-              <div className="batteryBar"><i style={{ width: `${battery}%` }} /></div>
-              <small>≈ {(battery * .04).toFixed(1)} MJ AVAILABLE</small>
+
+            <div className="connector second"><div className="energyDots"><i /><i /><i /><i /></div><span>electric current</span></div>
+
+            <div className={`energyNode batteryNode ${active.battery ? "on" : ""}`}>
+              <div className="charge"><i style={{ height: `${battery}%` }} /></div>
+              <span>ELECTRICAL ENERGY</span><b>ENERGY STORE</b><strong>{battery}%</strong><small>Electricity is stored as chemical energy</small>
+            </div>
+
+            <div className="connector third"><div className="energyDots"><i /><i /><i /><i /></div><span>electric current</span></div>
+
+            <div className={`machineNode kNode ${mode === "brake" || mode === "boost" || mode === "heat" ? "on" : ""}`}>
+              <div className="rotor">K</div><span>MGU-K</span><b>{mode === "brake" ? "GENERATOR" : "MOTOR"}</b><small>{mode === "brake" ? "Rotation becomes electricity" : "Electricity becomes rotation"}</small>
+            </div>
+
+            <div className="connector fourth"><div className="energyDots"><i /><i /><i /><i /></div><span>{mode === "brake" ? "slows" : "turns"}</span></div>
+
+            <div className={`energyNode wheelNode ${active.wheels ? "on" : ""}`}>
+              <div className="wheelIcon"><i /><i /></div>
+              <span>KINETIC ENERGY</span><b>REAR WHEELS</b><small>Rotation changes the car&apos;s motion</small>
             </div>
           </div>
 
-          <aside className="explainCard">
-            <span className="step">0{phases.findIndex(p => p.id === phase) + 1} / 04</span>
-            <h2>{phaseCopy[phase].title}</h2>
-            <p>{phaseCopy[phase].body}</p>
-            <div className="takeaway"><small>ENERGY PATH</small><strong>{phaseCopy[phase].takeaway}</strong></div>
-            <button className="play" onClick={() => setRunning(!running)}><span>{running ? "Ⅱ" : "▶"}</span>{running ? "PAUSE LAP" : "PLAY FULL LAP"}</button>
-          </aside>
-        </div>
+          <div className="flowExplanation">
+            <span>{data.number}</span>
+            <div><h2>{data.title}</h2><p>{data.summary}</p></div>
+            <div className="key"><small>THE SIMPLE VERSION</small><strong>{mode === "heat" ? "Heat → Electricity → Motion" : mode === "brake" ? "Motion → Electricity → Stored energy" : "Stored energy → Electricity → Motion"}</strong></div>
+          </div>
+        </section>
       </section>
 
-      <section className="compare">
-        <div><span className="bigLetter cyan">K</span><h3>MGU-K</h3><p><b>K = Kinetic.</b> Connected to the crankshaft. It recovers energy while braking and adds power while accelerating.</p><dl><div><dt>MAX POWER</dt><dd>120 kW</dd></div><div><dt>≈ HORSEPOWER</dt><dd>161 hp</dd></div></dl></div>
-        <div><span className="bigLetter orange">H</span><h3>MGU-H</h3><p><b>H = Heat.</b> Connected to the turbo shaft. It recovers exhaust energy and can spin the turbo to fight lag.</p><dl><div><dt>ENERGY LIMIT</dt><dd>Uncapped*</dd></div><div><dt>REMOVED</dt><dd>2026</dd></div></dl></div>
-        <div className="nowCard"><span>RULES UPDATE</span><h3>What changed in 2026?</h3><p>The MGU-H was removed. The MGU-K became much more powerful, so current F1 cars recover electrical energy primarily through braking.</p><small>*The simulator represents the 2014–2025 regulations. Values are simplified for teaching.</small></div>
+      <section className="lesson">
+        <div className="lessonTitle"><span>THE TWO REVERSIBLE MACHINES</span><h2>Motor when energy goes in.<br />Generator when motion goes in.</h2></div>
+        <div className="lessonCard k"><b>K</b><div><span>MGU-K · KINETIC</span><h3>Wheels ⇄ Electricity</h3><p>Connected to the crankshaft. It harvests kinetic energy under braking, then reverses direction to add power during acceleration.</p></div></div>
+        <div className="lessonCard h"><b>H</b><div><span>MGU-H · HEAT</span><h3>Turbo ⇄ Electricity</h3><p>Connected to the turbo shaft. It harvests energy from exhaust-driven rotation, then can act as a motor to keep the turbo spinning.</p></div></div>
       </section>
 
-      <footer><span>ERS LAB · SCIENCE CLASS SIMULATOR</span><span>ENERGY IS TRANSFORMED, NOT CREATED.</span></footer>
+      <section className="losses">
+        <span className="lossIcon">≈</span>
+        <div><small>REAL-WORLD SCIENCE</small><h2>No conversion is 100% efficient.</h2></div>
+        <p>Some energy always spreads to the surroundings as heat and sound. The ERS does not create energy—it recovers part of the energy that would otherwise be wasted.</p>
+      </section>
 
-      {infoOpen && <div className="modalBackdrop" onClick={() => setInfoOpen(false)}>
-        <div className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onClick={e => e.stopPropagation()}>
-          <button className="close" onClick={() => setInfoOpen(false)} aria-label="Close">×</button>
-          <span className="eyebrow">THE BIG IDEA</span><h2 id="modal-title">One machine, two directions.</h2>
-          <p>A motor-generator is reversible. When electricity goes in, it acts as a <b>motor</b> and creates motion. When motion goes in, it acts as a <b>generator</b> and creates electricity.</p>
-          <div className="formula">KINETIC / HEAT ENERGY ⇄ ELECTRICAL ENERGY</div>
-          <p>Real team software constantly decides whether to harvest, store, or deploy energy. This model slows those decisions down so you can see them.</p>
-          <button className="play" onClick={() => setInfoOpen(false)}>GOT IT</button>
-        </div>
-      </div>}
+      <section className="update"><span>2026 UPDATE</span><p>Current Formula 1 removed the MGU-H. This simulator shows the two-unit hybrid system used from 2014 through 2025.</p></section>
+      <footer><span>ERS LAB · SCIENCE CLASS SIMULATOR</span><span>THERMAL · ELECTRICAL · CHEMICAL · KINETIC</span></footer>
     </main>
   );
 }
