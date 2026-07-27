@@ -32,6 +32,27 @@ export default function Simulator() {
   const hSteps = ["Hot exhaust flows from the engine", "The turbo shaft spins", "MGU-H turns the spinning shaft into electricity"];
   const kSteps = ["The rear wheels turn while braking", "MGU-K acts as a generator", "Electricity charges the battery", "Later, MGU-K uses that electricity to accelerate"];
   const steps = view === "together" ? togetherSteps : view === "h" ? hSteps : kSteps;
+  const flowStages = view === "together"
+    ? [
+        { icon: "♨", type: "HEAT", label: "Hot exhaust" },
+        { icon: "↻", type: "ROTATION", label: "Turbo shaft" },
+        { icon: "⚡", type: "ELECTRICITY", label: "From MGU-H" },
+        { icon: "↻", type: "ROTATION", label: "MGU-K motor" },
+        { icon: "➜", type: "MOTION", label: "Rear wheels" },
+      ]
+    : view === "h"
+      ? [
+          { icon: "♨", type: "HEAT", label: "Hot exhaust" },
+          { icon: "↻", type: "ROTATION", label: "Turbo shaft" },
+          { icon: "⚡", type: "ELECTRICITY", label: "MGU-H output" },
+        ]
+      : [
+          { icon: "➜", type: "MOTION", label: "Wheels braking" },
+          { icon: "↻", type: "ROTATION", label: "MGU-K generator" },
+          { icon: "⚡", type: "ELECTRICITY", label: "Battery charging" },
+          { icon: "↻", type: "ROTATION", label: "MGU-K motor" },
+          { icon: "➜", type: "MOTION", label: "Wheels boosted" },
+        ];
 
   const partInfo: Record<string, { name: string; plain: string; detail: string; color: string }> = {
     engine: { name: "V6 ENGINE", plain: "Burns fuel", detail: "Hot exhaust gas leaves the cylinders and carries energy toward the turbo.", color: "white" },
@@ -71,6 +92,9 @@ export default function Simulator() {
             <img src="/car-cutaway.png" alt="Illustrated cutaway of the rear half of a Formula-style hybrid race car showing its engine, turbo, motor-generators, battery, drivetrain and rear wheels" />
             <div className={`energyPath heatPath ${view !== "k" ? "show" : ""}`}><i /><i /><i /><i /></div>
             <div className={`energyPath electricPath ${view !== "h" ? "show" : ""}`}><i /><i /><i /><i /><i /></div>
+            <div className={`carArrow exhaustArrow ${view !== "k" ? "show" : ""}`}><span>HEAT</span></div>
+            <div className={`carArrow hToKArrow ${view === "together" ? "show" : ""}`}><span>ELECTRICITY</span></div>
+            <div className={`carArrow kToWheelArrow ${view !== "h" ? "show" : ""}`}><span>{view === "k" ? "MOTION ⇄ ELECTRICITY" : "MOTION"}</span></div>
 
             <button className={`hotspot engineSpot ${selected === "engine" ? "selected" : ""}`} onClick={() => setSelected("engine")}><span>1</span><b>V6 ENGINE</b></button>
             <button className={`hotspot turboSpot ${selected === "turbo" ? "selected" : ""}`} onClick={() => setSelected("turbo")}><span>2</span><b>TURBO</b></button>
@@ -82,6 +106,18 @@ export default function Simulator() {
             <aside className={`partCard ${partInfo[selected].color}`}>
               <span>CLICKED PART</span><h2>{partInfo[selected].name}</h2><b>{partInfo[selected].plain}</b><p>{partInfo[selected].detail}</p>
             </aside>
+          </div>
+
+          <div className={`conversionRibbon ribbon-${view}`}>
+            <div className="ribbonTitle"><small>WATCH THE ENERGY CHANGE FORM</small><b>Read left → right</b></div>
+            <div className="ribbonFlow">
+              {flowStages.map((stage, index) => (
+                <div className="ribbonItem" key={`${stage.type}-${index}`}>
+                  <div className={`energyStage type-${stage.type.toLowerCase()}`}><span>{stage.icon}</span><small>{stage.type}</small><b>{stage.label}</b></div>
+                  {index < flowStages.length - 1 && <div className="bigArrow"><i /><span>changes into</span></div>}
+                </div>
+              ))}
+            </div>
           </div>
 
           <div className="story">
