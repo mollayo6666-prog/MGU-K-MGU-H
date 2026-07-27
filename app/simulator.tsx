@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 
-type Mode = "heat" | "brake" | "boost";
+type Mode = "heat" | "direct" | "brake" | "boost";
 
 const modes: { id: Mode; label: string; sub: string }[] = [
   { id: "heat", label: "HARVEST HEAT", sub: "Full throttle" },
+  { id: "direct", label: "H → K TRANSFER", sub: "Direct wheel power" },
   { id: "brake", label: "HARVEST MOTION", sub: "Braking" },
   { id: "boost", label: "DEPLOY ENERGY", sub: "Acceleration" },
 ];
@@ -13,14 +14,22 @@ const modes: { id: Mode; label: string; sub: string }[] = [
 const modeData = {
   heat: {
     number: "01",
-    title: "Heat becomes motion",
-    summary: "Exhaust spins the turbo and MGU-H. The electricity can be stored, or sent across the car to the MGU-K to help turn the wheels.",
-    equation: "THERMAL → MECHANICAL → ELECTRICAL → KINETIC",
+    title: "Heat charges the battery",
+    summary: "Exhaust spins the turbo and MGU-H. The MGU-H generates electricity and sends it to the energy store for use later in the lap.",
+    equation: "THERMAL → MECHANICAL → ELECTRICAL → CHEMICAL",
+    source: "HOT EXHAUST",
+    destination: "BATTERY",
+  },
+  direct: {
+    number: "02",
+    title: "MGU-K receives energy",
+    summary: "The MGU-H generates electricity from the turbo and sends it directly to the MGU-K. The MGU-K acts as a motor and adds the recovered energy to the drivetrain without storing it first.",
+    equation: "THERMAL → MECHANICAL → ELECTRICAL → MECHANICAL → KINETIC",
     source: "HOT EXHAUST",
     destination: "REAR WHEELS",
   },
   brake: {
-    number: "02",
+    number: "03",
     title: "Motion is recovered",
     summary: "During braking, the wheels drive the MGU-K as a generator. The car slows while part of its kinetic energy becomes electricity instead of brake heat.",
     equation: "KINETIC → MECHANICAL → ELECTRICAL → CHEMICAL",
@@ -28,7 +37,7 @@ const modeData = {
     destination: "BATTERY",
   },
   boost: {
-    number: "03",
+    number: "04",
     title: "Stored energy returns",
     summary: "The battery releases electrical energy. The MGU-K acts as a motor, adding torque to the crankshaft and increasing the kinetic energy of the car.",
     equation: "CHEMICAL → ELECTRICAL → MECHANICAL → KINETIC",
@@ -45,7 +54,7 @@ export default function Simulator() {
 
   useEffect(() => {
     if (!playing) return;
-    const order: Mode[] = ["heat", "brake", "boost"];
+    const order: Mode[] = ["heat", "direct", "brake", "boost"];
     const timer = window.setInterval(() => {
       setMode((current) => order[(order.indexOf(current) + 1) % order.length]);
     }, 3500);
@@ -57,9 +66,9 @@ export default function Simulator() {
   }, [mode]);
 
   const active = useMemo(() => ({
-    heat: mode === "heat",
-    battery: mode === "heat" || mode === "brake" || mode === "boost",
-    wheels: mode === "brake" || mode === "boost" || mode === "heat",
+    heat: mode === "heat" || mode === "direct",
+    battery: mode !== "direct",
+    wheels: mode === "brake" || mode === "boost" || mode === "direct",
     reverse: mode === "brake",
   }), [mode]);
 
@@ -93,20 +102,25 @@ export default function Simulator() {
           </div>
 
           <div className="bothUnits">
-            <div className={`unitSummary hSummary ${mode === "heat" ? "active" : ""}`}>
+            <div className={`unitSummary hSummary ${mode === "heat" || mode === "direct" ? "active" : ""}`}>
               <div className="summaryBadge">H</div>
               <div><span>MOTOR GENERATOR UNIT — HEAT</span><h2>MGU-H</h2><p><b>Turbo ⇄ electricity</b> · recovers exhaust energy and controls turbo speed</p></div>
-              <strong>{mode === "heat" ? "ACTIVE · GENERATING" : "AVAILABLE"}</strong>
+              <strong>{mode === "heat" || mode === "direct" ? "ACTIVE · GENERATING" : "AVAILABLE"}</strong>
             </div>
             <div className="unitJoin"><span>ENERGY<br />CAN FLOW<br />BETWEEN BOTH</span><i>⇄</i></div>
-            <div className={`unitSummary kSummary ${mode === "brake" || mode === "boost" ? "active" : ""}`}>
+            <div className={`unitSummary kSummary ${mode === "direct" || mode === "brake" || mode === "boost" ? "active" : ""}`}>
               <div className="summaryBadge">K</div>
               <div><span>MOTOR GENERATOR UNIT — KINETIC</span><h2>MGU-K</h2><p><b>Wheels ⇄ electricity</b> · recovers braking energy and adds acceleration</p></div>
-              <strong>{mode === "brake" ? "ACTIVE · GENERATING" : mode === "boost" ? "ACTIVE · MOTORING" : "RECEIVING ENERGY"}</strong>
+              <strong>{mode === "brake" ? "ACTIVE · GENERATING" : mode === "direct" ? "RECEIVING FROM MGU-H" : mode === "boost" ? "RECEIVING FROM BATTERY" : "AVAILABLE"}</strong>
             </div>
           </div>
 
           <div className="energyMap">
+            {mode === "direct" && <div className="directRoute">
+              <span>DIRECT ELECTRICAL TRANSFER — BATTERY BYPASSED</span>
+              <div><i /><i /><i /><i /><i /><i /></div>
+              <b>MGU-H&nbsp;&nbsp; → → → &nbsp;&nbsp;MGU-K</b>
+            </div>}
             <div className="sourceFlag"><small>ENERGY STARTS HERE</small><b>{data.source}</b></div>
             <div className="destinationFlag"><small>ENERGY ENDS HERE</small><b>{data.destination}</b></div>
 
@@ -117,7 +131,7 @@ export default function Simulator() {
 
             <div className="connector first"><div className="energyDots"><i /><i /><i /><i /></div><span>spins</span></div>
 
-            <div className={`machineNode hNode ${mode === "heat" ? "on" : ""}`}>
+            <div className={`machineNode hNode ${mode === "heat" || mode === "direct" ? "on" : ""}`}>
               <div className="rotor">H</div><span>MGU-H</span><b>GENERATOR</b><small>Turbo rotation becomes electricity</small>
             </div>
 
@@ -130,7 +144,7 @@ export default function Simulator() {
 
             <div className="connector third"><div className="energyDots"><i /><i /><i /><i /></div><span>electric current</span></div>
 
-            <div className={`machineNode kNode ${mode === "brake" || mode === "boost" || mode === "heat" ? "on" : ""}`}>
+            <div className={`machineNode kNode ${mode === "brake" || mode === "boost" || mode === "direct" ? "on" : ""}`}>
               <div className="rotor">K</div><span>MGU-K</span><b>{mode === "brake" ? "GENERATOR" : "MOTOR"}</b><small>{mode === "brake" ? "Rotation becomes electricity" : "Electricity becomes rotation"}</small>
             </div>
 
@@ -145,7 +159,7 @@ export default function Simulator() {
           <div className="flowExplanation">
             <span>{data.number}</span>
             <div><h2>{data.title}</h2><p>{data.summary}</p></div>
-            <div className="key"><small>THE SIMPLE VERSION</small><strong>{mode === "heat" ? "Heat → Electricity → Motion" : mode === "brake" ? "Motion → Electricity → Stored energy" : "Stored energy → Electricity → Motion"}</strong></div>
+            <div className="key"><small>THE SIMPLE VERSION</small><strong>{mode === "heat" ? "Heat → MGU-H → Battery" : mode === "direct" ? "Heat → MGU-H → MGU-K → Wheels" : mode === "brake" ? "Wheels → MGU-K → Battery" : "Battery → MGU-K → Wheels"}</strong></div>
           </div>
         </section>
       </section>
