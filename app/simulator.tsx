@@ -80,7 +80,6 @@ export default function Simulator() {
       <header className="slideHeader">
         <div className="brand"><span>E</span> ERS 실험실</div>
         <div className="slideTitle"><small>F1 하이브리드 에너지 회수 시스템 · 2014–2025</small><h1>MGU-H와 MGU-K는 어떻게 작동할까?</h1></div>
-        <div className="classTag">과학 발표용</div>
       </header>
 
       <section className="slideBody">
