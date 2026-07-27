@@ -53,6 +53,11 @@ export default function Simulator() {
   const [step, setStep] = useState(0);
   const [selectedPart, setSelectedPart] = useState<Part>("engine");
   const stages = flow[mode];
+  const stepParts: Record<Mode, Part[]> = {
+    both: ["engine", "h", "h", "k", "wheel"],
+    h: ["engine", "h", "h"],
+    k: ["wheel", "k", "battery", "k", "wheel"],
+  };
 
   useEffect(() => {
     setStep(0);
@@ -65,6 +70,10 @@ export default function Simulator() {
     const timer = window.setInterval(() => setStep((value) => (value + 1) % stages.length), 1200);
     return () => window.clearInterval(timer);
   }, [playing, stages.length]);
+
+  useEffect(() => {
+    setSelectedPart(stepParts[mode][step]);
+  }, [step, mode]);
 
   return (
     <main className="slideApp">
@@ -103,6 +112,7 @@ export default function Simulator() {
         <div className={`carPanel mode-${mode}`}>
           <img src="/car-cutaway.png" alt="F1 하이브리드 파워유닛의 엔진, 터보, MGU-H, 배터리, MGU-K와 뒷바퀴 단면도" />
           <div className="carShade" />
+          <div className={`partGlow glow-${selectedPart}`}><i /><span>{parts[selectedPart].name} 작동 중</span></div>
 
           <button className={`label engineLabel ${selectedPart === "engine" ? "selected" : ""}`} onClick={() => setSelectedPart("engine")}><i>1</i><span><b>V6 엔진</b><small>눌러서 작동 보기</small></span></button>
           <button className={`label hLabel ${mode === "k" ? "dim" : ""} ${selectedPart === "h" ? "selected" : ""}`} onClick={() => setSelectedPart("h")}><i>H</i><span><b>MGU-H</b><small>눌러서 작동 보기</small></span></button>
@@ -120,9 +130,9 @@ export default function Simulator() {
         <div className="flowSteps">
           {stages.map((item, index) => (
             <div className="stepWrap" key={`${item.type}-${index}`}>
-              <div className={`flowStep ${index === step ? "active" : ""} type-${item.type}`}>
+              <button className={`flowStep ${index === step ? "active" : ""} type-${item.type}`} onClick={() => { setStep(index); setPlaying(false); }} aria-label={`${item.label} 단계와 관련 부품 보기`}>
                 <span>{item.icon}</span><div><small>{item.type}에너지</small><b>{item.label}</b></div>
-              </div>
+              </button>
               {index < stages.length - 1 && <div className="flowArrow"><i /><small>변환</small></div>}
             </div>
           ))}
