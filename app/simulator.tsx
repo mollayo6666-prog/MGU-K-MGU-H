@@ -19,6 +19,7 @@ export default function Simulator() {
   useEffect(() => {
     setStep(0);
     setPlaying(false);
+    setSelected(view === "k" ? "k" : view === "h" ? "h" : "engine");
   }, [view]);
 
   useEffect(() => {
