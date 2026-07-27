@@ -13,17 +13,17 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "ERS Lab — MGU-K & MGU-H Simulator",
-  description: "An interactive classroom simulator for Formula 1's 2014–2025 hybrid energy recovery system.",
+  title: "ERS 실험실 — MGU-K·MGU-H 시뮬레이터",
+  description: "F1의 2014–2025 하이브리드 에너지 회수 시스템을 한 장으로 배우는 과학 수업용 시뮬레이터입니다.",
   openGraph: {
-    title: "ERS Lab — MGU-K & MGU-H Simulator",
-    description: "Turn wasted energy into lap time.",
+    title: "ERS 실험실 — MGU-K·MGU-H 시뮬레이터",
+    description: "버려질 에너지가 어떻게 다시 가속력이 되는지 한 장으로 알아보세요.",
     images: ["/og.png"],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ERS Lab — MGU-K & MGU-H Simulator",
-    description: "Turn wasted energy into lap time.",
+    title: "ERS 실험실 — MGU-K·MGU-H 시뮬레이터",
+    description: "버려질 에너지가 어떻게 다시 가속력이 되는지 한 장으로 알아보세요.",
     images: ["/og.png"],
   },
   icons: {

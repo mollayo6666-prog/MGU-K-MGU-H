@@ -2,145 +2,115 @@
 
 import { useEffect, useState } from "react";
 
-type View = "together" | "h" | "k";
+type Mode = "both" | "h" | "k";
 
-const views: { id: View; title: string; sub: string }[] = [
-  { id: "together", title: "SEE BOTH WORK", sub: "Full-throttle energy flow" },
-  { id: "h", title: "ONLY MGU-H", sub: "Exhaust and turbo" },
-  { id: "k", title: "ONLY MGU-K", sub: "Braking and acceleration" },
+const modes: { id: Mode; title: string; sub: string }[] = [
+  { id: "both", title: "두 장치 함께 보기", sub: "직선 구간" },
+  { id: "h", title: "MGU-H만 보기", sub: "배기·터보 에너지" },
+  { id: "k", title: "MGU-K만 보기", sub: "제동·가속 에너지" },
 ];
 
+const flow = {
+  both: [
+    { icon: "♨", type: "열", label: "뜨거운 배기가스" },
+    { icon: "↻", type: "회전", label: "터보축" },
+    { icon: "⚡", type: "전기", label: "MGU-H 발전" },
+    { icon: "↻", type: "회전", label: "MGU-K 모터" },
+    { icon: "➜", type: "운동", label: "뒷바퀴 가속" },
+  ],
+  h: [
+    { icon: "♨", type: "열", label: "뜨거운 배기가스" },
+    { icon: "↻", type: "회전", label: "터보축" },
+    { icon: "⚡", type: "전기", label: "MGU-H 발전" },
+  ],
+  k: [
+    { icon: "➜", type: "운동", label: "제동하는 바퀴" },
+    { icon: "↻", type: "회전", label: "MGU-K 발전" },
+    { icon: "⚡", type: "전기", label: "배터리 저장" },
+    { icon: "↻", type: "회전", label: "MGU-K 모터" },
+    { icon: "➜", type: "운동", label: "뒷바퀴 가속" },
+  ],
+};
+
+const summaries = {
+  both: { title: "버려질 에너지가 다시 가속력이 된다", text: "배기가스가 MGU-H에서 전기로 바뀌고, 그 전기를 받은 MGU-K가 뒷바퀴를 더 빠르게 돌립니다." },
+  h: { title: "H는 Heat(열)", text: "터보축에 연결되어 배기가스가 만든 회전을 전기로 바꿉니다. 필요하면 반대로 터보를 돌려 지연도 줄입니다." },
+  k: { title: "K는 Kinetic(운동)", text: "크랭크축에 연결되어 제동할 때는 발전기, 가속할 때는 모터로 작동합니다." },
+};
+
 export default function Simulator() {
-  const [view, setView] = useState<View>("together");
-  const [step, setStep] = useState(0);
+  const [mode, setMode] = useState<Mode>("both");
   const [playing, setPlaying] = useState(false);
-  const [selected, setSelected] = useState("h");
+  const [step, setStep] = useState(0);
+  const stages = flow[mode];
 
   useEffect(() => {
     setStep(0);
     setPlaying(false);
-    setSelected(view === "k" ? "k" : view === "h" ? "h" : "engine");
-  }, [view]);
+  }, [mode]);
 
   useEffect(() => {
     if (!playing) return;
-    const max = view === "together" ? 5 : view === "h" ? 3 : 4;
-    const timer = window.setInterval(() => setStep((s) => (s + 1) % max), 1300);
+    const timer = window.setInterval(() => setStep((value) => (value + 1) % stages.length), 1200);
     return () => window.clearInterval(timer);
-  }, [playing, view]);
-
-  const togetherSteps = ["Hot exhaust leaves the engine", "Exhaust spins the turbo", "MGU-H makes electricity", "Electricity reaches MGU-K", "MGU-K helps turn the rear wheels"];
-  const hSteps = ["Hot exhaust flows from the engine", "The turbo shaft spins", "MGU-H turns the spinning shaft into electricity"];
-  const kSteps = ["The rear wheels turn while braking", "MGU-K acts as a generator", "Electricity charges the battery", "Later, MGU-K uses that electricity to accelerate"];
-  const steps = view === "together" ? togetherSteps : view === "h" ? hSteps : kSteps;
-  const flowStages = view === "together"
-    ? [
-        { icon: "♨", type: "HEAT", label: "Hot exhaust" },
-        { icon: "↻", type: "ROTATION", label: "Turbo shaft" },
-        { icon: "⚡", type: "ELECTRICITY", label: "From MGU-H" },
-        { icon: "↻", type: "ROTATION", label: "MGU-K motor" },
-        { icon: "➜", type: "MOTION", label: "Rear wheels" },
-      ]
-    : view === "h"
-      ? [
-          { icon: "♨", type: "HEAT", label: "Hot exhaust" },
-          { icon: "↻", type: "ROTATION", label: "Turbo shaft" },
-          { icon: "⚡", type: "ELECTRICITY", label: "MGU-H output" },
-        ]
-      : [
-          { icon: "➜", type: "MOTION", label: "Wheels braking" },
-          { icon: "↻", type: "ROTATION", label: "MGU-K generator" },
-          { icon: "⚡", type: "ELECTRICITY", label: "Battery charging" },
-          { icon: "↻", type: "ROTATION", label: "MGU-K motor" },
-          { icon: "➜", type: "MOTION", label: "Wheels boosted" },
-        ];
-
-  const partInfo: Record<string, { name: string; plain: string; detail: string; color: string }> = {
-    engine: { name: "V6 ENGINE", plain: "Burns fuel", detail: "Hot exhaust gas leaves the cylinders and carries energy toward the turbo.", color: "white" },
-    turbo: { name: "TURBO", plain: "Spun by exhaust", detail: "The turbine and compressor share a shaft. Exhaust makes that shaft rotate very quickly.", color: "orange" },
-    h: { name: "MGU-H", plain: "Turbo ↔ electricity", detail: "The orange unit sits on the turbo shaft. It can generate electricity or motor the turbo.", color: "orange" },
-    battery: { name: "BATTERY", plain: "Stores electricity", detail: "The energy store saves recovered electrical energy until the car needs it.", color: "yellow" },
-    k: { name: "MGU-K", plain: "Wheels ↔ electricity", detail: "The blue unit connects to the crankshaft. It generates while braking and motors while accelerating.", color: "cyan" },
-    wheels: { name: "REAR WHEELS", plain: "Move the car", detail: "The drivetrain carries engine and MGU-K torque to the rear wheels.", color: "cyan" },
-  };
+  }, [playing, stages.length]);
 
   return (
-    <main>
-      <header className="topbar">
-        <a className="brand" href="#car"><span>E</span> ERS LAB</a>
-        <div>F1 HYBRID POWER · 2014–2025</div>
-        <small>BEGINNER MODE</small>
+    <main className="slideApp">
+      <header className="slideHeader">
+        <div className="brand"><span>E</span> ERS 실험실</div>
+        <div className="slideTitle"><small>F1 하이브리드 에너지 회수 시스템 · 2014–2025</small><h1>MGU-H와 MGU-K는 어떻게 작동할까?</h1></div>
+        <div className="classTag">과학 발표용</div>
       </header>
 
-      <section className="hero" id="car">
-        <div className="heroCopy">
-          <span className="eyebrow">LOOK INSIDE THE CAR</span>
-          <h1>WHERE ARE THE<br /><em>MGU-H & MGU-K?</em></h1>
-          <p>No engineering degree needed. Click the real parts, then press play to follow the energy through the car.</p>
+      <section className="slideBody">
+        <aside className="explainPanel">
+          <nav className="modeTabs" aria-label="설명 선택">
+            {modes.map((item) => <button key={item.id} className={mode === item.id ? "active" : ""} onClick={() => setMode(item.id)}><b>{item.title}</b><small>{item.sub}</small></button>)}
+          </nav>
+
+          <div className={`bigLetter modeLetter-${mode}`}>{mode === "both" ? "H+K" : mode.toUpperCase()}</div>
+          <span className="panelEyebrow">핵심 한 문장</span>
+          <h2>{summaries[mode].title}</h2>
+          <p>{summaries[mode].text}</p>
+
+          <div className="partsKey">
+            <div className={mode === "k" ? "muted" : ""}><i className="orangeDot" /><span><b>MGU-H</b><small>터보 옆 · 열에너지 담당</small></span></div>
+            <div className={mode === "h" ? "muted" : ""}><i className="cyanDot" /><span><b>MGU-K</b><small>구동계 옆 · 운동에너지 담당</small></span></div>
+          </div>
+
+          <button className="playButton" onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ  잠시 멈추기" : "▶  에너지 흐름 재생"}</button>
+        </aside>
+
+        <div className={`carPanel mode-${mode}`}>
+          <img src="/car-cutaway.png" alt="F1 하이브리드 파워유닛의 엔진, 터보, MGU-H, 배터리, MGU-K와 뒷바퀴 단면도" />
+          <div className="carShade" />
+
+          <div className="label engineLabel"><i>1</i><span><b>V6 엔진</b><small>연료를 태움</small></span></div>
+          <div className={`label hLabel ${mode === "k" ? "dim" : ""}`}><i>H</i><span><b>MGU-H</b><small>터보 ↔ 전기</small></span></div>
+          <div className="label batteryLabel"><i>2</i><span><b>배터리</b><small>전기 저장</small></span></div>
+          <div className={`label kLabel ${mode === "h" ? "dim" : ""}`}><i>K</i><span><b>MGU-K</b><small>바퀴 ↔ 전기</small></span></div>
+          <div className="label wheelLabel"><i>3</i><span><b>뒷바퀴</b><small>차를 움직임</small></span></div>
+
+          <div className={`carArrow heatArrow ${mode === "k" ? "hide" : ""}`}><span>배기가스의 열</span></div>
+          <div className={`carArrow powerArrow ${mode === "h" ? "hide" : ""}`}><span>전기 → 회전력</span></div>
         </div>
-
-        <nav className="viewPicker" aria-label="Choose explanation">
-          {views.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} onClick={() => setView(item.id)}><b>{item.title}</b><small>{item.sub}</small></button>)}
-        </nav>
-
-        <section className={`carLab view-${view}`}>
-          <div className="carHeader">
-            <div><span>NOW SHOWING</span><strong>{view === "together" ? "HOW BOTH UNITS WORK TOGETHER" : view === "h" ? "MGU-H · HEAT RECOVERY" : "MGU-K · KINETIC RECOVERY"}</strong></div>
-            <div className="legend"><i className="heatDot" />HEAT / MGU-H <i className="electricDot" />ELECTRICITY / MGU-K</div>
-          </div>
-
-          <div className="carCanvas">
-            <img src="/car-cutaway.png" alt="Illustrated cutaway of the rear half of a Formula-style hybrid race car showing its engine, turbo, motor-generators, battery, drivetrain and rear wheels" />
-            <div className={`energyPath heatPath ${view !== "k" ? "show" : ""}`}><i /><i /><i /><i /></div>
-            <div className={`energyPath electricPath ${view !== "h" ? "show" : ""}`}><i /><i /><i /><i /><i /></div>
-            <div className={`carArrow exhaustArrow ${view !== "k" ? "show" : ""}`}><span>HEAT</span></div>
-            <div className={`carArrow hToKArrow ${view === "together" ? "show" : ""}`}><span>ELECTRICITY</span></div>
-            <div className={`carArrow kToWheelArrow ${view !== "h" ? "show" : ""}`}><span>{view === "k" ? "MOTION ⇄ ELECTRICITY" : "MOTION"}</span></div>
-
-            <button className={`hotspot engineSpot ${selected === "engine" ? "selected" : ""}`} onClick={() => setSelected("engine")}><span>1</span><b>V6 ENGINE</b></button>
-            <button className={`hotspot turboSpot ${selected === "turbo" ? "selected" : ""}`} onClick={() => setSelected("turbo")}><span>2</span><b>TURBO</b></button>
-            <button className={`hotspot hSpot ${selected === "h" ? "selected" : ""} ${view === "k" ? "dim" : ""}`} onClick={() => setSelected("h")}><span>H</span><b>MGU-H</b></button>
-            <button className={`hotspot batterySpot ${selected === "battery" ? "selected" : ""}`} onClick={() => setSelected("battery")}><span>3</span><b>BATTERY</b></button>
-            <button className={`hotspot kSpot ${selected === "k" ? "selected" : ""} ${view === "h" ? "dim" : ""}`} onClick={() => setSelected("k")}><span>K</span><b>MGU-K</b></button>
-            <button className={`hotspot wheelSpot ${selected === "wheels" ? "selected" : ""}`} onClick={() => setSelected("wheels")}><span>4</span><b>REAR WHEELS</b></button>
-
-            <aside className={`partCard ${partInfo[selected].color}`}>
-              <span>CLICKED PART</span><h2>{partInfo[selected].name}</h2><b>{partInfo[selected].plain}</b><p>{partInfo[selected].detail}</p>
-            </aside>
-          </div>
-
-          <div className={`conversionRibbon ribbon-${view}`}>
-            <div className="ribbonTitle"><small>WATCH THE ENERGY CHANGE FORM</small><b>Read left → right</b></div>
-            <div className="ribbonFlow">
-              {flowStages.map((stage, index) => (
-                <div className="ribbonItem" key={`${stage.type}-${index}`}>
-                  <div className={`energyStage type-${stage.type.toLowerCase()}`}><span>{stage.icon}</span><small>{stage.type}</small><b>{stage.label}</b></div>
-                  {index < flowStages.length - 1 && <div className="bigArrow"><i /><span>changes into</span></div>}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="story">
-            <div className="storyTop">
-              <div><span>THE STORY IN ONE SENTENCE</span><strong>{view === "together" ? "Exhaust spins MGU-H → electricity powers MGU-K → wheels turn faster." : view === "h" ? "Exhaust spins the turbo → MGU-H turns that spin into electricity." : "Wheels spin MGU-K while braking → electricity is saved → MGU-K later boosts the wheels."}</strong></div>
-              <button onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ  PAUSE" : "▶  SHOW ME"}</button>
-            </div>
-            <ol>
-              {steps.map((text, index) => <li key={text} className={index === step ? "active" : index < step ? "done" : ""}><span>{index + 1}</span><p>{text}</p></li>)}
-            </ol>
-          </div>
-        </section>
       </section>
 
-      <section className="cheatSheet">
-        <div><span className="orange">H</span><h2>MGU-H</h2><b>Lives beside the turbo</b><p>Think: <strong>hot exhaust</strong>. It recovers energy from the spinning turbo shaft.</p></div>
-        <div className="versus">AND</div>
-        <div><span className="cyan">K</span><h2>MGU-K</h2><b>Lives beside the drivetrain</b><p>Think: <strong>moving wheels</strong>. It recovers braking energy and adds acceleration.</p></div>
+      <section className="flowBar">
+        <div className="flowHeading"><span>에너지 변화</span><b>왼쪽에서 오른쪽으로 읽기</b></div>
+        <div className="flowSteps">
+          {stages.map((item, index) => (
+            <div className="stepWrap" key={`${item.type}-${index}`}>
+              <div className={`flowStep ${index === step ? "active" : ""} type-${item.type}`}>
+                <span>{item.icon}</span><div><small>{item.type}에너지</small><b>{item.label}</b></div>
+              </div>
+              {index < stages.length - 1 && <div className="flowArrow"><i /><small>변환</small></div>}
+            </div>
+          ))}
+        </div>
+        <div className="lawBox"><b>에너지는 새로 생기지 않는다</b><span>원래 버려질 에너지를 다른 형태로 바꿔 다시 사용한다.</span></div>
       </section>
-
-      <section className="truth"><b>ONE IMPORTANT DETAIL</b><p>The MGU units do not create free energy. Every conversion loses some energy as heat and sound; they simply rescue energy that would otherwise be wasted.</p></section>
-      <footer><span>ERS LAB · SCIENCE CLASS SIMULATOR</span><span>MGU-H WAS REMOVED FROM F1 IN 2026</span></footer>
     </main>
   );
 }
