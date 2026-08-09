@@ -1,142 +1,177 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-type Mode = "both" | "h" | "k";
-type Part = "engine" | "h" | "battery" | "k" | "wheel";
+type DriveMode = "READY" | "ACCEL" | "BRAKE" | "COAST" | "FINISH";
 
-const modes: { id: Mode; title: string; sub: string }[] = [
-  { id: "both", title: "두 장치 함께 보기", sub: "직선 구간" },
-  { id: "h", title: "MGU-H만 보기", sub: "배기·터보 에너지" },
-  { id: "k", title: "MGU-K만 보기", sub: "제동·가속 에너지" },
-];
-
-const flow = {
-  both: [
-    { icon: "♨", type: "열", label: "뜨거운 배기가스" },
-    { icon: "↻", type: "회전", label: "터보축" },
-    { icon: "⚡", type: "전기", label: "MGU-H 발전" },
-    { icon: "↻", type: "회전", label: "MGU-K 모터" },
-    { icon: "➜", type: "운동", label: "뒷바퀴 가속" },
-  ],
-  h: [
-    { icon: "♨", type: "열", label: "뜨거운 배기가스" },
-    { icon: "↻", type: "회전", label: "터보축" },
-    { icon: "⚡", type: "전기", label: "MGU-H 발전" },
-  ],
-  k: [
-    { icon: "➜", type: "운동", label: "제동하는 바퀴" },
-    { icon: "↻", type: "회전", label: "MGU-K 발전" },
-    { icon: "⚡", type: "전기", label: "배터리 저장" },
-    { icon: "↻", type: "회전", label: "MGU-K 모터" },
-    { icon: "➜", type: "운동", label: "뒷바퀴 가속" },
-  ],
-};
-
-const summaries = {
-  both: { title: "버려질 에너지가 다시 가속력이 된다", text: "배기가스가 MGU-H에서 전기로 바뀌고, 그 전기를 받은 MGU-K가 뒷바퀴를 더 빠르게 돌립니다." },
-  h: { title: "H는 Heat(열)", text: "터보축에 연결되어 배기가스가 만든 회전을 전기로 바꿉니다. 필요하면 반대로 터보를 돌려 지연도 줄입니다." },
-  k: { title: "K는 Kinetic(운동)", text: "크랭크축에 연결되어 제동할 때는 발전기, 가속할 때는 모터로 작동합니다." },
-};
-
-const parts: Record<Part, { name: string; role: string; definition: string; operation: string; color: string }> = {
-  engine: { name: "V6 엔진", role: "연료 → 열·회전", definition: "1.6 L 터보 엔진은 연료를 태워 크랭크축을 돌리고 뜨거운 배기가스를 만듭니다.", operation: "피스톤이 위아래로 움직이며 크랭크축을 회전시킵니다.", color: "neutral" },
-  h: { name: "MGU-H", role: "터보 회전 ↔ 전기", definition: "터보축에 직접 연결된 모터·발전기입니다. H는 Heat(열)를 뜻합니다.", operation: "배기가스가 터보축을 돌리면 MGU-H가 전기를 생산합니다.", color: "orange" },
-  battery: { name: "에너지 저장장치", role: "전기 저장·공급", definition: "MGU-H와 MGU-K가 회수한 전기에너지를 화학에너지 형태로 저장하는 고전압 배터리입니다.", operation: "회수할 때 충전되고, 가속할 때 MGU-K로 전기를 보냅니다.", color: "yellow" },
-  k: { name: "MGU-K", role: "바퀴 회전 ↔ 전기", definition: "크랭크축에 연결된 모터·발전기입니다. K는 Kinetic(운동)을 뜻합니다.", operation: "제동 때는 발전기로 충전하고, 가속 때는 모터로 바퀴를 돕습니다.", color: "cyan" },
-  wheel: { name: "뒷바퀴·구동계", role: "회전 → 자동차 운동", definition: "엔진과 MGU-K의 회전력을 노면에 전달해 자동차를 앞으로 움직입니다.", operation: "가속 때 빨라지고, 제동 때는 MGU-K를 돌려 에너지를 회수합니다.", color: "cyan" },
-};
+function carPose(progress: number) {
+  if (progress < 60) return { x: 9 + progress * 0.84, y: 32, angle: 0 };
+  if (progress < 80) {
+    const t = (progress - 60) / 20;
+    const theta = -Math.PI / 2 + t * Math.PI / 2;
+    return { x: 59.4 + 20 * Math.cos(theta), y: 52 + 20 * Math.sin(theta), angle: t * 90 };
+  }
+  return { x: 79.4, y: 52 + (progress - 80) * 1.75, angle: 90 };
+}
 
 export default function Simulator() {
-  const [mode, setMode] = useState<Mode>("both");
-  const [playing, setPlaying] = useState(false);
-  const [step, setStep] = useState(0);
-  const [selectedPart, setSelectedPart] = useState<Part>("engine");
-  const stages = flow[mode];
-  const stepParts: Record<Mode, Part[]> = {
-    both: ["engine", "h", "h", "k", "wheel"],
-    h: ["engine", "h", "h"],
-    k: ["wheel", "k", "battery", "k", "wheel"],
-  };
+  const [speed, setSpeed] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const [battery, setBattery] = useState(58);
+  const [accelerating, setAccelerating] = useState(false);
+  const [braking, setBraking] = useState(false);
+  const [mode, setMode] = useState<DriveMode>("READY");
+  const [lap, setLap] = useState(1);
+  const [message, setMessage] = useState("가속 페달을 눌러 출발하세요");
+  const speedRef = useRef(0);
+  const progressRef = useRef(0);
+  const batteryRef = useRef(58);
+  const inputsRef = useRef({ accelerating: false, braking: false });
+
+  useEffect(() => { inputsRef.current = { accelerating, braking }; }, [accelerating, braking]);
 
   useEffect(() => {
-    setStep(0);
-    setPlaying(false);
-    setSelectedPart(mode === "h" ? "h" : mode === "k" ? "k" : "engine");
-  }, [mode]);
+    const down = (event: KeyboardEvent) => {
+      if (event.code === "ArrowUp") { event.preventDefault(); setAccelerating(true); }
+      if (event.code === "Space" || event.code === "ArrowDown") { event.preventDefault(); setBraking(true); }
+    };
+    const up = (event: KeyboardEvent) => {
+      if (event.code === "ArrowUp") setAccelerating(false);
+      if (event.code === "Space" || event.code === "ArrowDown") setBraking(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+  }, []);
 
   useEffect(() => {
-    if (!playing) return;
-    const timer = window.setInterval(() => setStep((value) => (value + 1) % stages.length), 1200);
-    return () => window.clearInterval(timer);
-  }, [playing, stages.length]);
+    let frame = 0;
+    let previous = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min((now - previous) / 1000, 0.05);
+      previous = now;
+      const input = inputsRef.current;
+      let nextSpeed = speedRef.current;
+      let nextBattery = batteryRef.current;
 
-  useEffect(() => {
-    setSelectedPart(stepParts[mode][step]);
-  }, [step, mode]);
+      if (input.braking) {
+        nextSpeed = Math.max(0, nextSpeed - 115 * dt);
+        nextBattery = Math.min(100, nextBattery + Math.min(nextSpeed / 65, 2.2) * dt);
+      } else if (input.accelerating) {
+        const electricHelp = nextBattery > 4 ? 1 : 0.55;
+        nextSpeed = Math.min(320, nextSpeed + (62 * electricHelp - nextSpeed * 0.055) * dt);
+        nextBattery = Math.max(0, nextBattery - (nextSpeed > 20 ? 1.25 : 0.45) * dt);
+      } else {
+        nextSpeed = Math.max(0, nextSpeed - (7 + nextSpeed * 0.018) * dt);
+      }
+
+      let nextProgress = progressRef.current + nextSpeed * dt * 0.011;
+      if (nextProgress >= 100) {
+        nextProgress = 0;
+        nextSpeed = 0;
+        setLap((value) => value + 1);
+        setMode("FINISH");
+        setMessage("한 바퀴 완료! 다시 가속해 보세요");
+      } else if (nextProgress >= 60 && nextProgress < 80) {
+        if (nextSpeed > 145) setMessage("너무 빠릅니다! 브레이크를 누르세요");
+        else if (input.braking) setMessage("좋아요! MGU-K가 제동 에너지를 회수합니다");
+        else setMessage("코너 제한 속도: 145 km/h 이하");
+      } else if (nextProgress >= 80) {
+        if (input.accelerating) setMessage("코너 탈출! MGU-K가 가속을 돕습니다");
+        else setMessage("가속 페달을 눌러 코너를 빠져나가세요");
+      } else if (nextProgress >= 48) {
+        setMessage("코너 접근 중 — 브레이크를 준비하세요");
+      } else if (input.accelerating) setMessage("직선 가속 — MGU-H와 MGU-K가 함께 작동합니다");
+
+      const nextMode: DriveMode = input.braking ? "BRAKE" : input.accelerating ? "ACCEL" : nextSpeed > 1 ? "COAST" : "READY";
+      if (nextProgress < 99.8) setMode(nextMode);
+      speedRef.current = nextSpeed;
+      progressRef.current = nextProgress;
+      batteryRef.current = nextBattery;
+      setSpeed(nextSpeed);
+      setProgress(nextProgress);
+      setBattery(nextBattery);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, []);
+
+  const pose = carPose(progress);
+  const inCorner = progress >= 60 && progress < 80;
+  const atExit = progress >= 80;
+  const mguKPower = braking ? Math.min(120, speed * 0.65) : accelerating ? Math.min(120, battery * 1.2) : 0;
+  const mguHPower = accelerating ? Math.min(85, 22 + speed * 0.2) : braking ? 4 : speed > 20 ? 12 : 0;
+  const safe = !inCorner || speed <= 145;
+
+  const pedalProps = (setter: (value: boolean) => void) => ({
+    onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => { event.currentTarget.setPointerCapture(event.pointerId); setter(true); },
+    onPointerUp: () => setter(false),
+    onPointerCancel: () => setter(false),
+    onPointerLeave: () => setter(false),
+  });
 
   return (
-    <main className="slideApp">
-      <header className="slideHeader">
-        <div className="brand"><span>E</span> ERS 실험실</div>
-        <div className="slideTitle"><small>F1 하이브리드 에너지 회수 시스템 · 2014–2025</small><h1>MGU-H와 MGU-K는 어떻게 작동할까?</h1></div>
+    <main className="raceSim">
+      <header className="simHeader">
+        <div className="brand"><span>E</span> ERS 드라이빙 랩</div>
+        <div className="titleBlock"><small>F1 하이브리드 에너지 체험</small><h1>브레이크로 충전하고, 가속으로 사용하라</h1></div>
+        <div className="lapCounter">LAP <b>{lap}</b></div>
       </header>
 
-      <section className="slideBody">
-        <aside className="explainPanel">
-          <nav className="modeTabs" aria-label="설명 선택">
-            {modes.map((item) => <button key={item.id} className={mode === item.id ? "active" : ""} onClick={() => setMode(item.id)}><b>{item.title}</b><small>{item.sub}</small></button>)}
-          </nav>
-
-          <div className="modeSummary">
-            <div className={`bigLetter modeLetter-${mode}`}>{mode === "both" ? "H+K" : mode.toUpperCase()}</div>
-            <div><span className="panelEyebrow">핵심 한 문장</span><h2>{summaries[mode].title}</h2><p>{summaries[mode].text}</p></div>
+      <section className="gameGrid">
+        <div className="trackPanel">
+          <div className="trackHud">
+            <div><small>속도</small><b>{Math.round(speed)}</b><span>km/h</span></div>
+            <div><small>구간</small><b>{inCorner ? "코너" : atExit ? "탈출" : "직선"}</b></div>
+            <div className={safe ? "safe" : "danger"}><small>상태</small><b>{safe ? "정상" : "과속"}</b></div>
           </div>
+          <div className="instruction"><i className={`signal ${inCorner ? "brakeSignal" : atExit ? "goSignal" : ""}`} /><span>{message}</span></div>
 
-          <div className={`partInspector inspector-${parts[selectedPart].color}`}>
-            <div className="inspectorTop"><span>선택한 부품</span><b>{parts[selectedPart].role}</b></div>
-            <div className={`partAnimation anim-${selectedPart}`}>
-              {selectedPart === "engine" && <div className="pistons"><i /><i /><i /></div>}
-              {selectedPart === "h" && <div className="rotor"><i /></div>}
-              {selectedPart === "battery" && <div className="batteryAnim"><i /></div>}
-              {selectedPart === "k" && <div className="kRotor"><i /></div>}
-              {selectedPart === "wheel" && <div className="wheelAnim"><i /><i /></div>}
+          <div className="track" aria-label="짧은 직선 뒤 오른쪽 코너가 있는 트랙">
+            <div className="grassTexture" />
+            <div className="road straightRoad"><i /></div>
+            <div className="road curveRoad"><i /></div>
+            <div className="road exitRoad"><i /></div>
+            <div className="brakeZone"><span>BRAKE ZONE</span></div>
+            <div className="apex"><i /><span>APEX</span></div>
+            <div className="startLine" />
+            <div className="finishLine" />
+
+            <div className={`miniCar mode-${mode.toLowerCase()} ${!safe ? "sliding" : ""}`} style={{ left: `${pose.x}%`, top: `${pose.y}%`, transform: `translate(-50%,-50%) rotate(${pose.angle}deg)` }}>
+              <div className="frontWing" /><div className="carBody"><i className="cockpit" /><i className="energyPulse" /></div><div className="rearWing" /><i className="tyre t1" /><i className="tyre t2" /><i className="tyre t3" /><i className="tyre t4" />
             </div>
-            <div className="inspectorCopy"><h3>{parts[selectedPart].name}</h3><p>{parts[selectedPart].definition}</p><strong>작동: {parts[selectedPart].operation}</strong></div>
+          </div>
+        </div>
+
+        <aside className="systemsPanel">
+          <div className="panelHeading"><small>실시간 에너지 흐름</small><h2>{braking ? "제동 에너지 회수" : accelerating ? "전기 에너지 사용" : "시스템 대기"}</h2></div>
+
+          <div className={`systemCard kCard ${braking || accelerating ? "active" : ""}`}>
+            <div className="systemTitle"><span>K</span><div><b>MGU-K</b><small>{braking ? "발전기 모드" : accelerating ? "모터 모드" : "대기"}</small></div><strong>{Math.round(mguKPower)} kW</strong></div>
+            <div className={`energyDiagram ${braking ? "reverse" : ""}`}><div className="wheelSymbol">◉</div><div className="movingArrow"><i /><i /><i /></div><div className="unitSymbol">K</div><div className="movingArrow"><i /><i /><i /></div><div className="batterySymbol">▥</div></div>
+            <p>{braking ? "바퀴의 운동에너지 → 전기에너지 → 배터리 충전" : accelerating ? "배터리 전기에너지 → MGU-K 회전력 → 바퀴 가속" : "브레이크 또는 가속 페달을 눌러 보세요."}</p>
+            <div className="powerBar"><i style={{ width: `${mguKPower / 1.2}%` }} /></div>
           </div>
 
-          <button className="playButton" onClick={() => setPlaying(!playing)}>{playing ? "Ⅱ  잠시 멈추기" : "▶  에너지 흐름 재생"}</button>
+          <div className={`systemCard hCard ${accelerating ? "active" : ""}`}>
+            <div className="systemTitle"><span>H</span><div><b>MGU-H</b><small>{accelerating ? "터보 발전·제어" : braking ? "배기량 감소" : "대기"}</small></div><strong>{Math.round(mguHPower)} kW</strong></div>
+            <div className="energyDiagram"><div className="exhaustSymbol">≋</div><div className="movingArrow"><i /><i /><i /></div><div className="unitSymbol">H</div><div className="movingArrow"><i /><i /><i /></div><div className="turboSymbol">◎</div></div>
+            <p>{accelerating ? "뜨거운 배기가스가 터보와 MGU-H를 돌려 전기를 만들고 터보 회전을 조절합니다." : braking ? "가속 페달을 놓아 배기가스가 줄어들고 MGU-H 발전량도 낮아집니다." : "가속하면 배기가스의 에너지를 회수합니다."}</p>
+            <div className="powerBar orange"><i style={{ width: `${mguHPower}%` }} /></div>
+          </div>
+
+          <div className="batteryMeter"><div><span>ENERGY STORE</span><b>{Math.round(battery)}%</b></div><div className="batteryFill"><i style={{ width: `${battery}%` }} /></div><small>{braking ? "▲ MGU-K가 충전 중" : accelerating ? "▼ MGU-K에 전력 공급 중" : "— 충전량 유지"}</small></div>
         </aside>
-
-        <div className={`carPanel mode-${mode}`}>
-          <img src="/car-cutaway.png" alt="F1 하이브리드 파워유닛의 엔진, 터보, MGU-H, 배터리, MGU-K와 뒷바퀴 단면도" />
-          <div className="carShade" />
-          <div className={`partGlow glow-${selectedPart}`}><i /><span>{parts[selectedPart].name} 작동 중</span></div>
-
-          <button className={`label engineLabel ${selectedPart === "engine" ? "selected" : ""}`} onClick={() => setSelectedPart("engine")}><i>1</i><span><b>V6 엔진</b><small>눌러서 작동 보기</small></span></button>
-          <button className={`label hLabel ${mode === "k" ? "dim" : ""} ${selectedPart === "h" ? "selected" : ""}`} onClick={() => setSelectedPart("h")}><i>H</i><span><b>MGU-H</b><small>눌러서 작동 보기</small></span></button>
-          <button className={`label batteryLabel ${selectedPart === "battery" ? "selected" : ""}`} onClick={() => setSelectedPart("battery")}><i>2</i><span><b>배터리</b><small>눌러서 작동 보기</small></span></button>
-          <button className={`label kLabel ${mode === "h" ? "dim" : ""} ${selectedPart === "k" ? "selected" : ""}`} onClick={() => setSelectedPart("k")}><i>K</i><span><b>MGU-K</b><small>눌러서 작동 보기</small></span></button>
-          <button className={`label wheelLabel ${selectedPart === "wheel" ? "selected" : ""}`} onClick={() => setSelectedPart("wheel")}><i>3</i><span><b>뒷바퀴</b><small>눌러서 작동 보기</small></span></button>
-
-          <div className={`carArrow heatArrow ${mode === "k" ? "hide" : ""}`}><span>배기가스의 열</span></div>
-          <div className={`carArrow powerArrow ${mode === "h" ? "hide" : ""}`}><span>전기 → 회전력</span></div>
-        </div>
       </section>
 
-      <section className="flowBar">
-        <div className="flowHeading"><span>에너지 변화</span><b>왼쪽에서 오른쪽으로 읽기</b></div>
-        <div className="flowSteps">
-          {stages.map((item, index) => (
-            <div className="stepWrap" key={`${item.type}-${index}`}>
-              <button className={`flowStep ${index === step ? "active" : ""} type-${item.type}`} onClick={() => { setStep(index); setPlaying(false); }} aria-label={`${item.label} 단계와 관련 부품 보기`}>
-                <span>{item.icon}</span><div><small>{item.type}에너지</small><b>{item.label}</b></div>
-              </button>
-              {index < stages.length - 1 && <div className="flowArrow"><i /><small>변환</small></div>}
-            </div>
-          ))}
+      <section className="controls">
+        <div className="controlHelp"><span>운전 방법</span><h2>{progress < 48 ? "가속해서 코너로 이동" : inCorner ? "브레이크로 145 km/h 이하" : "가속해서 코너 탈출"}</h2><p>키보드: ↑ 가속 · Space/↓ 브레이크</p></div>
+        <div className="pedalCluster">
+          <button className={`pedal brakePedal ${braking ? "pressed" : ""}`} {...pedalProps(setBraking)} aria-label="브레이크 페달"><span className="pedalFace"><i /><i /><i /><i /><i /><i /></span><b>BRAKE</b><small>브레이크</small></button>
+          <button className={`pedal accelPedal ${accelerating ? "pressed" : ""}`} {...pedalProps(setAccelerating)} aria-label="가속 페달"><span className="pedalFace"><i /><i /><i /><i /><i /></span><b>ACCEL</b><small>가속</small></button>
         </div>
-        <div className="lawBox"><b>에너지는 새로 생기지 않는다</b><span>원래 버려질 에너지를 다른 형태로 바꿔 다시 사용한다.</span></div>
+        <div className="pedalReadout"><div><span>브레이크 입력</span><i><b style={{ width: braking ? "100%" : "0%" }} /></i></div><div><span>가속 입력</span><i><b style={{ width: accelerating ? "100%" : "0%" }} /></i></div></div>
       </section>
     </main>
   );
