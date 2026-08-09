@@ -210,7 +210,7 @@ export default function Simulator() {
             <div className="drsActivation"><i /><span>54m 후 DRS</span></div>
 
             <div className={`miniCar mode-${mode.toLowerCase()} ${speedClass}`} style={{ left: `${pose.x}%`, top: `${pose.y}%`, transform: `translate(-50%,-50%) rotate(${pose.angle}deg)` }}>
-              <img src={ruleYear === 2025 ? "/kick-sauber-2025.png" : "/audi-r26-2026.png"} alt={ruleYear === 2025 ? "2025 Kick Sauber 스타일 F1 차량" : "2026 Audi 스타일 F1 차량"} draggable="false" /><i className="energyPulse" />
+              <img src={ruleYear === 2025 ? "./kick-sauber-2025.png" : "./audi-r26-2026.png"} alt={ruleYear === 2025 ? "2025 Kick Sauber 스타일 F1 차량" : "2026 Audi 스타일 F1 차량"} draggable="false" /><i className="energyPulse" />
             </div>
           </div>
         </div>
