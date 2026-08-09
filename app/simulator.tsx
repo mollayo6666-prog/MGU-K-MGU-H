@@ -3,87 +3,132 @@
 import { useEffect, useRef, useState } from "react";
 
 type DriveMode = "READY" | "ACCEL" | "BRAKE" | "COAST" | "FINISH";
+type RuleYear = 2025 | 2026;
 
 function carPose(progress: number) {
-  if (progress < 60) return { x: 9 + progress * 0.84, y: 32, angle: 0 };
-  if (progress < 80) {
-    const t = (progress - 60) / 20;
-    const theta = -Math.PI / 2 + t * Math.PI / 2;
-    return { x: 59.4 + 20 * Math.cos(theta), y: 52 + 20 * Math.sin(theta), angle: t * 90 };
+  if (progress < 38) return { x: 28, y: 8 + progress * (45 / 38), angle: 90 };
+  if (progress < 62) {
+    const t = (progress - 38) / 24;
+    const theta = Math.PI - t * Math.PI / 2;
+    return {
+      x: 40 + 12 * Math.cos(theta),
+      y: 53 + 12 * Math.sin(theta),
+      angle: 90 - t * 90,
+    };
   }
-  return { x: 79.4, y: 52 + (progress - 80) * 1.75, angle: 90 };
+  return { x: 40 + (progress - 62) * (54 / 38), y: 65, angle: 0 };
+}
+
+function smoothstep(value: number) {
+  const t = Math.min(1, Math.max(0, value));
+  return t * t * (3 - 2 * t);
+}
+
+function interpolate(from: number, to: number, value: number) {
+  return from + (to - from) * smoothstep(value);
+}
+
+// Display-only estimate, kept separate from the visible animation physics.
+function qualifyingSpeed(progress: number) {
+  if (progress < 22) return interpolate(200, 264, progress / 22);
+  if (progress < 38) return interpolate(264, 120, (progress - 22) / 16);
+  if (progress < 50) return interpolate(120, 110, (progress - 38) / 12);
+  if (progress < 62) return interpolate(110, 132, (progress - 50) / 12);
+  return interpolate(132, 315, (progress - 62) / 38);
 }
 
 export default function Simulator() {
-  const [speed, setSpeed] = useState(0);
+  const [ruleYear, setRuleYear] = useState<RuleYear>(2025);
+  const [speed, setSpeed] = useState(200);
   const [progress, setProgress] = useState(0);
   const [battery, setBattery] = useState(58);
-  const [accelerating, setAccelerating] = useState(false);
-  const [braking, setBraking] = useState(false);
-  const [mode, setMode] = useState<DriveMode>("READY");
-  const [lap, setLap] = useState(1);
-  const [message, setMessage] = useState("가속 페달을 눌러 출발하세요");
-  const speedRef = useRef(0);
+  const [paused, setPaused] = useState(false);
+  const [mode, setMode] = useState<DriveMode>("ACCEL");
+  const [message, setMessage] = useState("시속 200 km로 직선을 주행 중입니다");
+  const speedRef = useRef(200);
   const progressRef = useRef(0);
   const batteryRef = useRef(58);
-  const inputsRef = useRef({ accelerating: false, braking: false });
+  const pausedRef = useRef(false);
 
-  useEffect(() => { inputsRef.current = { accelerating, braking }; }, [accelerating, braking]);
+  const togglePlayback = () => {
+    setPaused((current) => {
+      const next = !current;
+      pausedRef.current = next;
+      return next;
+    });
+  };
 
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
-      if (event.code === "ArrowUp") { event.preventDefault(); setAccelerating(true); }
-      if (event.code === "Space" || event.code === "ArrowDown") { event.preventDefault(); setBraking(true); }
-    };
-    const up = (event: KeyboardEvent) => {
-      if (event.code === "ArrowUp") setAccelerating(false);
-      if (event.code === "Space" || event.code === "ArrowDown") setBraking(false);
+      if (event.code === "Space" && !event.repeat) {
+        event.preventDefault();
+        togglePlayback();
+      }
     };
     window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
+    return () => window.removeEventListener("keydown", down);
   }, []);
 
   useEffect(() => {
     let frame = 0;
     let previous = performance.now();
     const tick = (now: number) => {
+      if (pausedRef.current) {
+        previous = now;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
       const dt = Math.min((now - previous) / 1000, 0.05);
       previous = now;
-      const input = inputsRef.current;
+      const currentProgress = progressRef.current;
+      const autoBrake = currentProgress >= 22 && currentProgress < 62;
+      const autoAccelerate = !autoBrake;
+      const effectiveBraking = autoBrake;
+      const effectiveAccelerating = autoAccelerate;
       let nextSpeed = speedRef.current;
       let nextBattery = batteryRef.current;
 
-      if (input.braking) {
-        nextSpeed = Math.max(0, nextSpeed - 115 * dt);
+      if (effectiveBraking) {
+        const brakingForce = nextSpeed > 118 ? 155 : 35;
+        nextSpeed = Math.max(82, nextSpeed - brakingForce * dt);
         nextBattery = Math.min(100, nextBattery + Math.min(nextSpeed / 65, 2.2) * dt);
-      } else if (input.accelerating) {
+      } else if (effectiveAccelerating) {
         const electricHelp = nextBattery > 4 ? 1 : 0.55;
-        nextSpeed = Math.min(320, nextSpeed + (62 * electricHelp - nextSpeed * 0.055) * dt);
+        nextSpeed = Math.min(305, nextSpeed + (54 * electricHelp - nextSpeed * 0.045) * dt);
         nextBattery = Math.max(0, nextBattery - (nextSpeed > 20 ? 1.25 : 0.45) * dt);
       } else {
         nextSpeed = Math.max(0, nextSpeed - (7 + nextSpeed * 0.018) * dt);
       }
 
-      let nextProgress = progressRef.current + nextSpeed * dt * 0.011;
+      // Normalize each path segment by its drawn length. A slightly nonlinear
+      // presentation scale makes high speed read clearly on a small slide:
+      // 200 km/h appears about 2.5x faster than 100 km/h.
+      const pathLengthPerProgress = currentProgress < 38
+        ? 45 / 38
+        : currentProgress < 62
+          ? Math.PI / 4
+          : 54 / 38;
+      const perceivedScreenSpeed = (100 / 15) * Math.pow(Math.max(nextSpeed, 1) / 100, 1.3);
+      const visualProgressRate = perceivedScreenSpeed / pathLengthPerProgress;
+      let nextProgress = progressRef.current + dt * visualProgressRate;
       if (nextProgress >= 100) {
         nextProgress = 0;
-        nextSpeed = 0;
-        setLap((value) => value + 1);
+        nextSpeed = 200;
         setMode("FINISH");
-        setMessage("한 바퀴 완료! 다시 가속해 보세요");
-      } else if (nextProgress >= 60 && nextProgress < 80) {
-        if (nextSpeed > 145) setMessage("너무 빠릅니다! 브레이크를 누르세요");
-        else if (input.braking) setMessage("좋아요! MGU-K가 제동 에너지를 회수합니다");
-        else setMessage("코너 제한 속도: 145 km/h 이하");
-      } else if (nextProgress >= 80) {
-        if (input.accelerating) setMessage("코너 탈출! MGU-K가 가속을 돕습니다");
-        else setMessage("가속 페달을 눌러 코너를 빠져나가세요");
-      } else if (nextProgress >= 48) {
-        setMessage("코너 접근 중 — 브레이크를 준비하세요");
-      } else if (input.accelerating) setMessage("직선 가속 — MGU-H와 MGU-K가 함께 작동합니다");
+        setMessage("주행 완료 — 시속 200 km로 다음 주행을 시작합니다");
+      } else if (nextProgress >= 38 && nextProgress < 62) {
+        if (nextSpeed > 110) setMessage("바쿠 2번 코너 제동 — 속도를 약 90 km/h까지 낮춥니다");
+        else if (effectiveBraking) setMessage("2번 코너 진입 — MGU-K가 제동 에너지를 전기로 회수합니다");
+        else setMessage("바쿠 2번 코너: 저속 90도 좌회전");
+      } else if (nextProgress >= 72) {
+        setMessage("다시 직선 — MGU-K 출력을 조절하며 고속으로 가속합니다");
+      } else if (nextProgress >= 62) {
+        setMessage("2번 코너 탈출 — MGU-K가 가속을 돕고 54m 뒤 DRS 구간이 시작됩니다");
+      } else if (nextProgress >= 22) {
+        setMessage("시속 200 km 이상 — 바쿠 2번 코너 강한 제동 시작");
+      } else if (effectiveAccelerating) setMessage("바쿠 2번 코너 접근 — MGU-H와 MGU-K가 가속을 돕습니다");
 
-      const nextMode: DriveMode = input.braking ? "BRAKE" : input.accelerating ? "ACCEL" : nextSpeed > 1 ? "COAST" : "READY";
+      const nextMode: DriveMode = effectiveBraking ? "BRAKE" : effectiveAccelerating ? "ACCEL" : nextSpeed > 1 ? "COAST" : "READY";
       if (nextProgress < 99.8) setMode(nextMode);
       speedRef.current = nextSpeed;
       progressRef.current = nextProgress;
@@ -98,80 +143,107 @@ export default function Simulator() {
   }, []);
 
   const pose = carPose(progress);
-  const inCorner = progress >= 60 && progress < 80;
-  const atExit = progress >= 80;
-  const mguKPower = braking ? Math.min(120, speed * 0.65) : accelerating ? Math.min(120, battery * 1.2) : 0;
-  const mguHPower = accelerating ? Math.min(85, 22 + speed * 0.2) : braking ? 4 : speed > 20 ? 12 : 0;
-  const safe = !inCorner || speed <= 145;
-
-  const pedalProps = (setter: (value: boolean) => void) => ({
-    onPointerDown: (event: React.PointerEvent<HTMLButtonElement>) => { event.currentTarget.setPointerCapture(event.pointerId); setter(true); },
-    onPointerUp: () => setter(false),
-    onPointerCancel: () => setter(false),
-    onPointerLeave: () => setter(false),
-  });
+  const inCorner = progress >= 38 && progress < 62;
+  const atExit = progress >= 62;
+  const isBraking = mode === "BRAKE";
+  const isAccelerating = mode === "ACCEL";
+  const displaySpeed = qualifyingSpeed(progress);
+  const mguKLimit = ruleYear === 2026 ? 350 : 120;
+  const mguKPower = ruleYear === 2026
+    ? isBraking
+      ? progress < 38
+        ? interpolate(350, 210, (progress - 22) / 16)
+        : interpolate(210, 95, (progress - 38) / 24)
+      : isAccelerating && atExit
+        ? interpolate(350, 250, (progress - 62) / 38)
+        : isAccelerating ? 350 : 0
+    : isBraking
+      ? progress < 38
+        ? interpolate(120, 72, (progress - 22) / 16)
+        : interpolate(72, 28, (progress - 38) / 24)
+      : isAccelerating && atExit
+        ? interpolate(120, 86, (progress - 62) / 38)
+        : isAccelerating ? 100 : 0;
+  const mguHPower = ruleYear === 2026 ? 0 : isBraking
+    ? Math.max(3, 28 - (progress - 22) * 0.62)
+    : isAccelerating && atExit
+      ? Math.min(85, 18 + (progress - 62) * 1.75)
+      : isAccelerating
+        ? Math.min(78, 56 + progress * 0.58)
+        : 0;
+  const mguKPercent = Math.min(100, Math.max(0, (mguKPower / mguKLimit) * 100));
+  const mguHPercent = Math.min(100, Math.max(0, (mguHPower / 85) * 100));
+  const phaseIndex = progress < 22 ? 0 : progress < 50 ? 1 : progress < 72 ? 2 : 3;
+  const speedClass = speed >= 170 ? "speed-fast" : speed <= 110 ? "speed-slow" : "speed-medium";
+  const displayedMessage = ruleYear === 2026 && progress < 22
+    ? "바쿠 2번 코너 접근 — 350 kW MGU-K가 가속을 돕습니다"
+    : message;
 
   return (
-    <main className="raceSim">
+    <main className={`raceSim videoMode ${paused ? "isPaused" : ""}`} onClick={togglePlayback} aria-label="바쿠 ERS 영상 시뮬레이터. 클릭하거나 Space 키로 재생 또는 일시정지합니다.">
       <header className="simHeader">
-        <div className="brand"><span>E</span> ERS 드라이빙 랩</div>
+        <div className="brand"><span>E</span> {ruleYear === 2025 ? "MGU-K, MGU-H" : "MGU-K"}</div>
         <div className="titleBlock"><small>F1 하이브리드 에너지 체험</small><h1>브레이크로 충전하고, 가속으로 사용하라</h1></div>
-        <div className="lapCounter">LAP <b>{lap}</b></div>
+        <div className="ruleSwitch" role="group" aria-label="파워유닛 규정 연도 선택">
+          <button className={ruleYear === 2025 ? "active" : ""} onClick={(event) => { event.stopPropagation(); setRuleYear(2025); }}><b>2025</b><small>K + H · 120 kW</small></button>
+          <button className={ruleYear === 2026 ? "active" : ""} onClick={(event) => { event.stopPropagation(); setRuleYear(2026); }}><b>2026</b><small>K · 350 kW</small></button>
+        </div>
       </header>
 
       <section className="gameGrid">
         <div className="trackPanel">
           <div className="trackHud">
-            <div><small>속도</small><b>{Math.round(speed)}</b><span>km/h</span></div>
-            <div><small>구간</small><b>{inCorner ? "코너" : atExit ? "탈출" : "직선"}</b></div>
-            <div className={safe ? "safe" : "danger"}><small>상태</small><b>{safe ? "정상" : "과속"}</b></div>
+            <div><small>속도</small><b>{Math.round(displaySpeed)}</b><span>km/h</span></div>
+            <div className="trackPhaseSteps" aria-label="트랙 진행 단계">
+              {["직선", "코너 진입", "코너 탈출", "다시 직선"].map((label, index) => <span className={phaseIndex === index ? "active" : ""} key={label}><i>{index + 1}</i>{label}</span>)}
+            </div>
           </div>
-          <div className="instruction"><i className={`signal ${inCorner ? "brakeSignal" : atExit ? "goSignal" : ""}`} /><span>{message}</span></div>
+          <div className="instruction"><i className="signal" /><span>{displayedMessage}</span></div>
 
-          <div className="track" aria-label="짧은 직선 뒤 오른쪽 코너가 있는 트랙">
+          <div className="track" aria-label="바쿠 시가지 서킷의 2번 왼쪽 코너와 긴 탈출 직선">
             <div className="grassTexture" />
-            <div className="road straightRoad"><i /></div>
-            <div className="road curveRoad"><i /></div>
+            <div className="road approachRoad"><i /></div>
+            <div className="road cornerRoad"><i /></div>
             <div className="road exitRoad"><i /></div>
-            <div className="brakeZone"><span>BRAKE ZONE</span></div>
-            <div className="apex"><i /><span>APEX</span></div>
-            <div className="startLine" />
-            <div className="finishLine" />
+            <div className="brakeZone"><span>BRAKE</span></div>
+            <div className="cornerNumber"><b>2</b><span>BAKU · TURN 2</span></div>
+            <div className="drsActivation"><i /><span>54m 후 DRS</span></div>
 
-            <div className={`miniCar mode-${mode.toLowerCase()} ${!safe ? "sliding" : ""}`} style={{ left: `${pose.x}%`, top: `${pose.y}%`, transform: `translate(-50%,-50%) rotate(${pose.angle}deg)` }}>
-              <div className="frontWing" /><div className="carBody"><i className="cockpit" /><i className="energyPulse" /></div><div className="rearWing" /><i className="tyre t1" /><i className="tyre t2" /><i className="tyre t3" /><i className="tyre t4" />
+            <div className={`miniCar mode-${mode.toLowerCase()} ${speedClass}`} style={{ left: `${pose.x}%`, top: `${pose.y}%`, transform: `translate(-50%,-50%) rotate(${pose.angle}deg)` }}>
+              <img src={ruleYear === 2025 ? "/kick-sauber-2025.png" : "/audi-r26-2026.png"} alt={ruleYear === 2025 ? "2025 Kick Sauber 스타일 F1 차량" : "2026 Audi 스타일 F1 차량"} draggable="false" /><i className="energyPulse" />
             </div>
           </div>
         </div>
 
         <aside className="systemsPanel">
-          <div className="panelHeading"><small>실시간 에너지 흐름</small><h2>{braking ? "제동 에너지 회수" : accelerating ? "전기 에너지 사용" : "시스템 대기"}</h2></div>
+          <div className="panelHeading"><small>실시간 에너지 흐름</small><h2>{isBraking ? "제동 에너지 회수" : isAccelerating ? "전기 에너지 사용" : "시스템 대기"}</h2></div>
 
-          <div className={`systemCard kCard ${braking || accelerating ? "active" : ""}`}>
-            <div className="systemTitle"><span>K</span><div><b>MGU-K</b><small>{braking ? "발전기 모드" : accelerating ? "모터 모드" : "대기"}</small></div><strong>{Math.round(mguKPower)} kW</strong></div>
-            <div className={`energyDiagram ${braking ? "reverse" : ""}`}><div className="wheelSymbol">◉</div><div className="movingArrow"><i /><i /><i /></div><div className="unitSymbol">K</div><div className="movingArrow"><i /><i /><i /></div><div className="batterySymbol">▥</div></div>
-            <p>{braking ? "바퀴의 운동에너지 → 전기에너지 → 배터리 충전" : accelerating ? "배터리 전기에너지 → MGU-K 회전력 → 바퀴 가속" : "브레이크 또는 가속 페달을 눌러 보세요."}</p>
-            <div className="powerBar"><i style={{ width: `${mguKPower / 1.2}%` }} /></div>
+          <div className={`systemCard kCard ${isBraking ? "active generatorMode" : isAccelerating ? "active motorMode" : ""}`}>
+            <div className="systemTitle"><span>K</span><div><b>MGU-K</b><small>{isBraking ? "발전기 모드" : isAccelerating ? "모터 모드" : "대기"}</small></div><strong>{Math.round(mguKPower)} kW</strong></div>
+            {isBraking ? (
+              <div className="energyDiagram generatorFlow" aria-label="바퀴에서 MGU-K를 거쳐 배터리로 충전"><div className="wheelSymbol modeIcon"><b>W</b><small>바퀴</small></div><div className="movingArrow"><i /><i /><i /></div><div className="unitSymbol modeIcon"><b>K</b><small>발전</small></div><div className="movingArrow"><i /><i /><i /></div><div className="batterySymbol modeIcon"><b>+</b><small>충전</small></div></div>
+            ) : (
+              <div className="energyDiagram motorFlow" aria-label="배터리에서 MGU-K를 거쳐 바퀴로 출력"><div className="batterySymbol modeIcon"><b>-</b><small>배터리</small></div><div className="movingArrow"><i /><i /><i /></div><div className="unitSymbol modeIcon"><b>K</b><small>모터</small></div><div className="movingArrow"><i /><i /><i /></div><div className="wheelSymbol modeIcon"><b>W</b><small>구동</small></div></div>
+            )}
+            <p>{isBraking ? "바퀴의 운동에너지 → 전기에너지 → 배터리 충전" : isAccelerating ? "배터리 전기에너지 → MGU-K 회전력 → 바퀴 가속" : "시스템이 주행 구간을 감지합니다."}</p>
+            <div className="powerBar"><i style={{ width: `${mguKPercent}%` }} /></div>
           </div>
 
-          <div className={`systemCard hCard ${accelerating ? "active" : ""}`}>
-            <div className="systemTitle"><span>H</span><div><b>MGU-H</b><small>{accelerating ? "터보 발전·제어" : braking ? "배기량 감소" : "대기"}</small></div><strong>{Math.round(mguHPower)} kW</strong></div>
+          {ruleYear === 2025 ? <div className={`systemCard hCard ${isAccelerating || isBraking ? "active" : ""}`}>
+            <div className="systemTitle"><span>H</span><div><b>MGU-H</b><small>{isAccelerating ? "터보 발전·제어" : isBraking ? "배기량 감소" : "대기"}</small></div><strong>{Math.round(mguHPower)} kW</strong></div>
             <div className="energyDiagram"><div className="exhaustSymbol">≋</div><div className="movingArrow"><i /><i /><i /></div><div className="unitSymbol">H</div><div className="movingArrow"><i /><i /><i /></div><div className="turboSymbol">◎</div></div>
-            <p>{accelerating ? "뜨거운 배기가스가 터보와 MGU-H를 돌려 전기를 만들고 터보 회전을 조절합니다." : braking ? "가속 페달을 놓아 배기가스가 줄어들고 MGU-H 발전량도 낮아집니다." : "가속하면 배기가스의 에너지를 회수합니다."}</p>
-            <div className="powerBar orange"><i style={{ width: `${mguHPower}%` }} /></div>
-          </div>
+            <p>{isAccelerating ? "뜨거운 배기가스가 터보와 MGU-H를 돌려 전기를 만들고 터보 회전을 조절합니다." : isBraking ? "가속이 해제되어 배기가스가 줄고 MGU-H 발전량도 낮아집니다." : "가속 구간을 기다립니다."}</p>
+            <div className="powerBar orange"><i style={{ width: `${mguHPercent}%` }} /></div>
+          </div> : <div className="systemCard noHCard active"><div className="systemTitle"><span>H</span><div><b>MGU-H 없음</b><small>2026 규정에서 삭제</small></div><strong>0 kW</strong></div><div className="removedFlow"><b>MGU-H</b><span>삭제</span></div><p>2026 파워유닛은 MGU-H를 사용하지 않고, MGU-K 전기 출력을 최대 350 kW로 높였습니다.</p><div className="powerBar"><i style={{ width: "0%" }} /></div></div>}
 
-          <div className="batteryMeter"><div><span>ENERGY STORE</span><b>{Math.round(battery)}%</b></div><div className="batteryFill"><i style={{ width: `${battery}%` }} /></div><small>{braking ? "▲ MGU-K가 충전 중" : accelerating ? "▼ MGU-K에 전력 공급 중" : "— 충전량 유지"}</small></div>
+          <div className="batteryMeter"><div><span>ENERGY STORE</span><b>{Math.round(battery)}%</b></div><div className="batteryFill"><i style={{ width: `${battery}%` }} /></div><small>{isBraking ? "▲ MGU-K가 자동 충전 중" : isAccelerating ? "▼ MGU-K에 자동 전력 공급 중" : "— 충전량 유지"}</small></div>
         </aside>
       </section>
 
-      <section className="controls">
-        <div className="controlHelp"><span>운전 방법</span><h2>{progress < 48 ? "가속해서 코너로 이동" : inCorner ? "브레이크로 145 km/h 이하" : "가속해서 코너 탈출"}</h2><p>키보드: ↑ 가속 · Space/↓ 브레이크</p></div>
-        <div className="pedalCluster">
-          <button className={`pedal brakePedal ${braking ? "pressed" : ""}`} {...pedalProps(setBraking)} aria-label="브레이크 페달"><span className="pedalFace"><i /><i /><i /><i /><i /><i /></span><b>BRAKE</b><small>브레이크</small></button>
-          <button className={`pedal accelPedal ${accelerating ? "pressed" : ""}`} {...pedalProps(setAccelerating)} aria-label="가속 페달"><span className="pedalFace"><i /><i /><i /><i /><i /></span><b>ACCEL</b><small>가속</small></button>
-        </div>
-        <div className="pedalReadout"><div><span>브레이크 입력</span><i><b style={{ width: braking ? "100%" : "0%" }} /></i></div><div><span>가속 입력</span><i><b style={{ width: accelerating ? "100%" : "0%" }} /></i></div></div>
+      <section className="videoControls">
+        <div className="videoToggle"><b>{paused ? "▶" : "Ⅱ"}</b><span>{paused ? "일시정지됨" : "자동 재생 중"}</span></div>
+        <div className="videoTimeline"><i><b style={{ width: `${progress}%` }} /></i><div>{["직선", "코너 진입", "코너 탈출", "다시 직선"].map((label, index) => <span className={phaseIndex === index ? "active" : ""} key={label}>{label}</span>)}</div></div>
+        <div className="videoHint">화면 클릭 또는 <kbd>SPACE</kbd></div>
       </section>
     </main>
   );
