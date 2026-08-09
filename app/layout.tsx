@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ERS 실험실 — MGU-K·MGU-H 시뮬레이터",
-  description: "F1의 2014–2025 하이브리드 에너지 회수 시스템을 한 장으로 배우는 과학 수업용 시뮬레이터입니다.",
+  description: "F1의 2025·2026 하이브리드 에너지 규정을 비교하며 배우는 과학 수업용 시뮬레이터입니다.",
   openGraph: {
     title: "ERS 실험실 — MGU-K·MGU-H 시뮬레이터",
     description: "버려질 에너지가 어떻게 다시 가속력이 되는지 한 장으로 알아보세요.",
@@ -38,7 +38,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="ko">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
