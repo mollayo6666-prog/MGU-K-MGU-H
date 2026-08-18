@@ -4,6 +4,49 @@ import { useEffect, useRef, useState } from "react";
 
 type DriveMode = "READY" | "ACCEL" | "BRAKE" | "COAST" | "FINISH";
 type RuleYear = 2025 | 2026;
+type ScreenView = "simulator" | "components";
+type ComponentChoice = "K" | "H";
+
+function ComponentFlowScreen({ choice, setChoice, onBack }: { choice: ComponentChoice; setChoice: (choice: ComponentChoice) => void; onBack: () => void }) {
+  const isK = choice === "K";
+  return (
+    <main className={`componentScreen show${choice}`}>
+      <header className="componentHeader">
+        <button className="backButton" onClick={onBack}>← 주행 시뮬레이터</button>
+        <div><small>실제 차량 속 에너지 경로</small><h1>MGU-{choice} 부품과 에너지 흐름</h1></div>
+        <div className="componentSwitch" role="group" aria-label="표시할 에너지 흐름 선택">
+          <button className={isK ? "active k" : ""} onClick={() => setChoice("K")}><b>MGU-K</b><small>바퀴·배터리</small></button>
+          <button className={!isK ? "active h" : ""} onClick={() => setChoice("H")}><b>MGU-H</b><small>배기·터보</small></button>
+        </div>
+      </header>
+
+      <section className="cutawayStage">
+        <img src="./car-cutaway.png" alt="파워 유닛과 구동계가 보이는 포뮬러 1 차량 컷어웨이" />
+        {isK ? <>
+          <div className="partSpot batterySpot"><i>1</i><b>에너지 저장장치</b><small>고전압 배터리</small></div>
+          <div className="partSpot kSpot"><i>2</i><b>MGU-K</b><small>크랭크축 연결 모터·발전기</small></div>
+          <div className="partSpot wheelSpot"><i>3</i><b>뒷바퀴</b><small>운동 에너지</small></div>
+          <div className="carFlow kDeploy flowBatteryK"><span>전기 에너지</span><b>→</b><i /><i /><i /></div>
+          <div className="carFlow kDeploy flowKWheel"><span>구동력</span><b>→</b><i /><i /><i /></div>
+          <div className="carFlow kRecover flowWheelK"><span>제동 에너지 회수</span><b>←</b><i /><i /><i /></div>
+        </> : <>
+          <div className="partSpot exhaustSpot"><i>1</i><b>배기 매니폴드</b><small>뜨거운 배기가스</small></div>
+          <div className="partSpot hSpot"><i>2</i><b>터보 + MGU-H</b><small>터보 축 연결 발전기</small></div>
+          <div className="partSpot batterySpot"><i>3</i><b>에너지 저장장치</b><small>고전압 배터리</small></div>
+          <div className="carFlow hFlowLine flowExhaustH"><span>열 → 회전</span><b>→</b><i /><i /><i /></div>
+          <div className="carFlow hFlowLine flowHBattery"><span>전기 에너지</span><b>→</b><i /><i /><i /></div>
+        </>}
+      </section>
+
+      <footer className="componentLegend">
+        {isK ? <>
+          <div className="legendMode deploy"><b>가속</b><span>배터리 전기 → MGU-K 모터 → 뒷바퀴 운동</span></div>
+          <div className="legendMode recover"><b>제동</b><span>뒷바퀴 운동 → MGU-K 발전 → 배터리 충전</span></div>
+        </> : <div className="legendMode heat"><b>배기 회수</b><span>배기가스 열 → 터보 축 회전 → MGU-H 발전 → 전기 저장·사용</span></div>}
+      </footer>
+    </main>
+  );
+}
 
 function EnergyFlowOverview({
   braking,
@@ -87,6 +130,8 @@ function qualifyingSpeed(progress: number) {
 }
 
 export default function Simulator() {
+  const [screenView, setScreenView] = useState<ScreenView>("simulator");
+  const [componentChoice, setComponentChoice] = useState<ComponentChoice>("K");
   const [ruleYear, setRuleYear] = useState<RuleYear>(2025);
   const [speed, setSpeed] = useState(200);
   const [progress, setProgress] = useState(0);
@@ -228,10 +273,14 @@ export default function Simulator() {
     ? "바쿠 2번 코너 접근 — 350 kW MGU-K가 가속을 돕습니다"
     : message;
 
+  if (screenView === "components") {
+    return <ComponentFlowScreen choice={componentChoice} setChoice={setComponentChoice} onBack={() => setScreenView("simulator")} />;
+  }
+
   return (
     <main className={`raceSim videoMode ${paused ? "isPaused" : ""}`} onClick={togglePlayback} aria-label="바쿠 ERS 영상 시뮬레이터. 클릭하거나 Space 키로 재생 또는 일시정지합니다.">
       <header className="simHeader">
-        <div className="brand"><span>E</span> {ruleYear === 2025 ? "MGU-K, MGU-H" : "MGU-K"}</div>
+        <div className="brand"><span>E</span> {ruleYear === 2025 ? "MGU-K, MGU-H" : "MGU-K"}<button className="anatomyButton" onClick={(event) => { event.stopPropagation(); setScreenView("components"); }}>차량 내부 보기 →</button></div>
         <div className="titleBlock"><small>F1 하이브리드 에너지 체험</small><h1>브레이크로 충전하고, 가속으로 사용하라</h1></div>
         <div className="ruleSwitch" role="group" aria-label="파워유닛 규정 연도 선택">
           <button className={ruleYear === 2025 ? "active" : ""} onClick={(event) => { event.stopPropagation(); setRuleYear(2025); }}><b>2025</b><small>K + H · 120 kW</small></button>
