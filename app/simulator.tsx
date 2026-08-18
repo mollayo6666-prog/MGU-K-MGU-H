@@ -5,6 +5,48 @@ import { useEffect, useRef, useState } from "react";
 type DriveMode = "READY" | "ACCEL" | "BRAKE" | "COAST" | "FINISH";
 type RuleYear = 2025 | 2026;
 
+function EnergyFlowOverview({
+  braking,
+  year,
+  kPower,
+  hPower,
+}: {
+  braking: boolean;
+  year: RuleYear;
+  kPower: number;
+  hPower: number;
+}) {
+  return (
+    <section className="energyOverview" aria-label="MGU-K와 MGU-H의 실시간 에너지 흐름">
+      <div className={`flowLane kFlow ${braking ? "recovering" : "deploying"}`}>
+        <div className="flowName"><b>MGU-K</b><span>{braking ? "회수" : "사용"} · {Math.round(kPower)} kW</span></div>
+        <div className="flowPath">
+          <div className="flowNode"><strong>{braking ? "바퀴" : "배터리"}</strong><small>{braking ? "운동 에너지" : "전기 에너지"}</small></div>
+          <div className="flowArrow" aria-hidden="true"><i /><i /><i /><b>→</b></div>
+          <div className="flowNode unit"><strong>MGU-K</strong><small>{braking ? "발전기" : "모터"}</small></div>
+          <div className="flowArrow" aria-hidden="true"><i /><i /><i /><b>→</b></div>
+          <div className="flowNode"><strong>{braking ? "배터리" : "바퀴"}</strong><small>{braking ? "전기 에너지" : "운동 에너지"}</small></div>
+        </div>
+        <div className="conversionText">{braking ? "운동 → 전기 → 저장" : "저장 전기 → 운동"}</div>
+      </div>
+
+      <div className={`flowLane hFlow ${year === 2026 ? "disabled" : ""}`}>
+        <div className="flowName"><b>MGU-H</b><span>{year === 2026 ? "2026 규정에서 삭제" : `회수 · ${Math.round(hPower)} kW`}</span></div>
+        {year === 2025 ? <>
+          <div className="flowPath">
+            <div className="flowNode"><strong>배기가스</strong><small>열 에너지</small></div>
+            <div className="flowArrow" aria-hidden="true"><i /><i /><i /><b>→</b></div>
+            <div className="flowNode unit"><strong>터보·H</strong><small>회전 발전</small></div>
+            <div className="flowArrow" aria-hidden="true"><i /><i /><i /><b>→</b></div>
+            <div className="flowNode"><strong>전기</strong><small>배터리 / MGU-K</small></div>
+          </div>
+          <div className="conversionText">열 → 회전 → 전기</div>
+        </> : <div className="flowRemoved">배기가스 <b>×</b> MGU-H <b>×</b> 전기</div>}
+      </div>
+    </section>
+  );
+}
+
 function carPose(progress: number) {
   if (progress < 38) return { x: 28, y: 8 + progress * (45 / 38), angle: 90 };
   if (progress < 62) {
@@ -216,6 +258,7 @@ export default function Simulator() {
         </div>
 
         <aside className="systemsPanel">
+          <EnergyFlowOverview braking={isBraking} year={ruleYear} kPower={mguKPower} hPower={mguHPower} />
           <div className="panelHeading"><small>실시간 에너지 흐름</small><h2>{isBraking ? "제동 에너지 회수" : isAccelerating ? "전기 에너지 사용" : "시스템 대기"}</h2></div>
 
           <div className={`systemCard kCard ${isBraking ? "active generatorMode" : isAccelerating ? "active motorMode" : ""}`}>
