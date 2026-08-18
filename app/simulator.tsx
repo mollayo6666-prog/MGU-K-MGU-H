@@ -22,19 +22,20 @@ function ComponentFlowScreen({ choice, setChoice, onBack }: { choice: ComponentC
 
       <section className="cutawayStage">
         <img src="./car-cutaway.png" alt="파워 유닛과 구동계가 보이는 포뮬러 1 차량 컷어웨이" />
+        <div className={`componentRoute route${choice}`} aria-label={isK ? "MGU-K 에너지 흐름" : "MGU-H 에너지 흐름"}>
+          {isK ? <>
+            <div className="routeRow deployRow"><span><b>배터리</b><small>전기 에너지</small></span><i><em /><em /><em />→</i><span><b>MGU-K</b><small>모터</small></span><i><em /><em /><em />→</i><span><b>뒷바퀴</b><small>운동 에너지</small></span></div>
+            <div className="routeRow recoverRow"><span><b>뒷바퀴</b><small>제동 운동</small></span><i><em /><em /><em />→</i><span><b>MGU-K</b><small>발전기</small></span><i><em /><em /><em />→</i><span><b>배터리</b><small>전기 저장</small></span></div>
+          </> : <div className="routeRow heatRow"><span><b>배기가스</b><small>열 에너지</small></span><i><em /><em /><em />→</i><span><b>터보 축</b><small>회전 에너지</small></span><i><em /><em /><em />→</i><span><b>MGU-H</b><small>발전</small></span><i><em /><em /><em />→</i><span><b>배터리·MGU-K</b><small>전기 에너지</small></span></div>}
+        </div>
         {isK ? <>
           <div className="partSpot batterySpot"><i>1</i><b>에너지 저장장치</b><small>고전압 배터리</small></div>
           <div className="partSpot kSpot"><i>2</i><b>MGU-K</b><small>크랭크축 연결 모터·발전기</small></div>
           <div className="partSpot wheelSpot"><i>3</i><b>뒷바퀴</b><small>운동 에너지</small></div>
-          <div className="carFlow kDeploy flowBatteryK"><span>전기 에너지</span><b>→</b><i /><i /><i /></div>
-          <div className="carFlow kDeploy flowKWheel"><span>구동력</span><b>→</b><i /><i /><i /></div>
-          <div className="carFlow kRecover flowWheelK"><span>제동 에너지 회수</span><b>←</b><i /><i /><i /></div>
         </> : <>
           <div className="partSpot exhaustSpot"><i>1</i><b>배기 매니폴드</b><small>뜨거운 배기가스</small></div>
           <div className="partSpot hSpot"><i>2</i><b>터보 + MGU-H</b><small>터보 축 연결 발전기</small></div>
           <div className="partSpot batterySpot"><i>3</i><b>에너지 저장장치</b><small>고전압 배터리</small></div>
-          <div className="carFlow hFlowLine flowExhaustH"><span>열 → 회전</span><b>→</b><i /><i /><i /></div>
-          <div className="carFlow hFlowLine flowHBattery"><span>전기 에너지</span><b>→</b><i /><i /><i /></div>
         </>}
       </section>
 
