@@ -16,6 +16,9 @@ function EnergyFlowOverview({
   kPower: number;
   hPower: number;
 }) {
+  const kLimit = year === 2026 ? 350 : 120;
+  const kPercent = Math.min(100, Math.max(0, (kPower / kLimit) * 100));
+  const hPercent = Math.min(100, Math.max(0, (hPower / 85) * 100));
   return (
     <section className="energyOverview" aria-label="MGU-K와 MGU-H의 실시간 에너지 흐름">
       <div className={`flowLane kFlow ${braking ? "recovering" : "deploying"}`}>
@@ -28,6 +31,8 @@ function EnergyFlowOverview({
           <div className="flowNode"><strong>{braking ? "배터리" : "바퀴"}</strong><small>{braking ? "전기 에너지" : "운동 에너지"}</small></div>
         </div>
         <div className="conversionText">{braking ? "운동 → 전기 → 저장" : "저장 전기 → 운동"}</div>
+        <p className="flowExplanation">{braking ? "바퀴가 MGU-K를 돌려 발전하고, 만든 전기를 배터리에 저장합니다." : "배터리 전기로 MGU-K를 돌려 뒷바퀴에 힘을 더합니다."}</p>
+        <div className="flowPower"><span>MGU-K 출력</span><i><b style={{ width: `${kPercent}%` }} /></i><strong>{Math.round(kPower)} / {kLimit} kW</strong></div>
       </div>
 
       <div className={`flowLane hFlow ${year === 2026 ? "disabled" : ""}`}>
@@ -41,6 +46,8 @@ function EnergyFlowOverview({
             <div className="flowNode"><strong>전기</strong><small>배터리 / MGU-K</small></div>
           </div>
           <div className="conversionText">열 → 회전 → 전기</div>
+          <p className="flowExplanation">뜨거운 배기가스가 터보 축을 돌리고, MGU-H가 회전을 전기로 바꿉니다.</p>
+          <div className="flowPower"><span>MGU-H 발전</span><i><b style={{ width: `${hPercent}%` }} /></i><strong>{Math.round(hPower)} / 85 kW</strong></div>
         </> : <div className="flowRemoved">배기가스 <b>×</b> MGU-H <b>×</b> 전기</div>}
       </div>
     </section>
